@@ -1,5 +1,5 @@
 // Load shared navbar
-fetch('/navbar.html')
+fetch('navbar.html')
     .then(response => response.text())
     .then(html => {
         const container = document.getElementById('navbar-container');
