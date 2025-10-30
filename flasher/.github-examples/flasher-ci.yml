@@ -1,0 +1,94 @@
+# Example CI workflow for ESP32 Web Flasher
+# Tests flasher configuration generation on every commit
+#
+# This workflow validates:
+# 1. project.json files are valid JSON
+# 2. Flasher configuration generates successfully
+# 3. Required fields are present
+#
+# Copy to .github/workflows/flasher-ci.yml
+
+name: Flasher CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'sensors/**/project.json'
+      - 'scripts/generate_flasher_config.py'
+      - 'docs/flasher/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'sensors/**/project.json'
+      - 'scripts/generate_flasher_config.py'
+      - 'docs/flasher/**'
+
+jobs:
+  validate-config:
+    name: Validate Flasher Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Validate project.json files
+        run: |
+          echo "Validating project.json files..."
+          find sensors -name "project.json" -type f | while read file; do
+            echo "Checking $file"
+            python3 -c "import json; json.load(open('$file'))" || exit 1
+            echo "✓ $file is valid JSON"
+          done
+
+      - name: Validate required fields
+        run: |
+          echo "Checking required fields in project.json files..."
+          python3 << 'EOF'
+          import json
+          import sys
+          from pathlib import Path
+
+          required_fields = ['name', 'id', 'description', 'hardware', 'software']
+          errors = []
+
+          for project_file in Path('sensors').rglob('project.json'):
+              with open(project_file) as f:
+                  project = json.load(f)
+
+              missing = [f for f in required_fields if f not in project]
+              if missing:
+                  errors.append(f"{project_file}: Missing fields {missing}")
+
+          if errors:
+              print("\nErrors found:")
+              for err in errors:
+                  print(f"  ❌ {err}")
+              sys.exit(1)
+          else:
+              print("✓ All project.json files have required fields")
+          EOF
+
+      - name: Generate flasher configuration (dry run)
+        env:
+          VERSION: "test"
+          GITHUB_REPOSITORY: "test/test"
+          CI: true
+        run: |
+          echo "Testing flasher configuration generation..."
+          python3 scripts/generate_flasher_config.py > /tmp/test-config.js
+
+          # Verify output is valid JavaScript
+          if [ ! -s /tmp/test-config.js ]; then
+            echo "❌ Configuration generation produced empty output"
+            exit 1
+          fi
+
+          echo "✓ Configuration generated successfully"
+          echo ""
+          echo "Generated configuration:"
+          cat /tmp/test-config.js

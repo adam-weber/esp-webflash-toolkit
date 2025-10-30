@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP WebFlash Toolkit - Browser-based ESP32 Provisioning</title>
+    <link rel="stylesheet" href="shared-styles.css">
+    <script>
+        // Apply dark mode immediately to prevent flash
+        (function() {
+            const savedMode = localStorage.getItem('darkMode');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedMode === 'dark' || (!savedMode && prefersDark)) {
+                document.documentElement.classList.add('dark-mode');
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="docs-styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <nav class="sidebar">
+        <div class="sidebar-section">Overview</div>
+        <a href="index.html" class="sidebar-link">Home</a>
+        <a href="#demos" class="sidebar-link">Demos</a>
+
+        <div class="sidebar-section">Usage</div>
+        <a href="#quickstart" class="sidebar-link">Quickstart</a>
+        <a href="examples.html" class="sidebar-link">Code Examples</a>
+        <a href="firmware-router.html" class="sidebar-link">Firmware Router</a>
+        <a href="web-flasher-scaffold.html" class="sidebar-link">Web Flasher Scaffold</a>
+        <a href="flash-to-device.html" class="sidebar-link">Flash to Device</a>
+        <a href="read-from-firmware.html" class="sidebar-link">Read from Firmware</a>
+        <a href="javascript-api.html" class="sidebar-link">JavaScript API</a>
+
+        <div class="sidebar-section">Advanced Topics</div>
+        <a href="edge-cases.html" class="sidebar-link">Edge Cases</a>
+
+        <div class="sidebar-section">Resources</div>
+        <a href="#links" class="sidebar-link">Links</a>
+    </nav>
+
+    <div class="container">
+        <div class="hero">
+            <h1>ESP WebFlash Toolkit</h1>
+            <p class="subtitle" style="margin: 0 0 16px 0; font-size: 19px; line-height: 1.5; color: var(--text-secondary);">
+                Application-layer toolkit extending <a href="https://espressif.github.io/esptool-js/" target="_blank" style="color: #007AFF; text-decoration: none;">esptool-js</a> for browser-based ESP32 provisioning. Generate NVS partitions client-side, route firmware by chip detection, and scaffold custom UIs. Components are composable and integrate independently.
+            </p>
+            <ul style="margin: 0 0 24px 0; padding-left: 24px; font-size: 15px; line-height: 1.6; color: var(--text-primary);">
+                <li style="margin-bottom: 8px;"><strong>Factory Programming:</strong> Scan barcodes for device IDs, input calibration values, flash via web interface. ~30 seconds per unit.</li>
+                <li style="margin-bottom: 8px;"><strong>Configuration Updates:</strong> Read NVS from device, modify parameters, regenerate partition, flash without reflashing firmware.</li>
+                <li style="margin-bottom: 0;"><strong>End-User Provisioning:</strong> Users input WiFi credentials through browser, connect device via USB. Credentials stay client-side.</li>
+            </ul>
+
+            <a href="#quickstart" class="quickstart-link" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; background: rgba(0,122,255,0.08); border: 1px solid rgba(0,122,255,0.2); border-radius: 10px; text-decoration: none; color: #007AFF; font-size: 14px; font-weight: 500; margin: 0 0 32px 0; transition: all 0.2s ease;">
+                <span>Jump to Quickstart where you'll generate and flash an ESP32 config in 30 seconds</span>
+                <span style="font-size: 16px;">↗</span>
+            </a>
+
+            <h2 id="demos" style="margin-top: 24px;">Demos</h2>
+
+
+            <!-- Firmware Router Preview Card -->
+            <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; margin: 0 0 32px 0;">
+                <!-- Preview Window -->
+                <div style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 32px 40px; overflow: hidden;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 32px; transform: scale(1); transform-origin: center;">
+                        <!-- Device Detection -->
+                        <div style="flex: 0 0 auto; text-align: center;">
+                            <div style="width: 72px; height: 72px; margin: 0 auto 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color-light); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                <div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.02em;">C3</div>
+                            </div>
+                            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">ESP32-C3</div>
+                            <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500;">Detected</div>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div style="flex: 0 0 auto; color: var(--text-tertiary); font-size: 24px; margin: 0 4px; font-weight: 400;">→</div>
+
+                        <!-- Routing Logic -->
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; max-width: 400px;">
+                            <div style="padding: 8px 14px; background: var(--bg-tertiary); border: 1px solid var(--border-color-light); border-radius: 6px; opacity: 0.35;">
+                                <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">ESP32</div>
+                                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 1px; font-family: 'SF Mono', Monaco, monospace; opacity: 0.8;">/firmware/esp32/</div>
+                            </div>
+                            <div style="padding: 10px 14px; background: linear-gradient(135deg, rgba(0,122,255,0.05) 0%, rgba(0,122,255,0.02) 100%); border: 1.5px solid #007AFF; border-radius: 6px; position: relative;">
+                                <div style="position: absolute; top: 10px; right: 12px; width: 16px; height: 16px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">✓</div>
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">ESP32-C3</div>
+                                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px; font-family: 'SF Mono', Monaco, monospace; opacity: 0.9;">/firmware/esp32c3/</div>
+                            </div>
+                            <div style="padding: 8px 14px; background: var(--bg-tertiary); border: 1px solid var(--border-color-light); border-radius: 6px; opacity: 0.35;">
+                                <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">ESP32-S3</div>
+                                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 1px; font-family: 'SF Mono', Monaco, monospace; opacity: 0.8;">/firmware/esp32s3/</div>
+                            </div>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div style="flex: 0 0 auto; color: var(--text-tertiary); font-size: 24px; margin: 0 4px; font-weight: 400;">→</div>
+
+                        <!-- Flash Status -->
+                        <div style="flex: 0 0 auto; text-align: center;">
+                            <div style="width: 72px; height: 72px; margin: 0 auto 10px; background: linear-gradient(135deg, rgba(0,122,255,0.06) 0%, rgba(0,122,255,0.03) 100%); border: 1px solid rgba(0,122,255,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 5px; box-shadow: 0 2px 6px rgba(0,122,255,0.08), inset 0 1px 0 rgba(255,255,255,0.5);">
+                                <div style="width: 40px; height: 3px; background: rgba(0,122,255,0.12); border-radius: 2px; overflow: hidden; box-shadow: inset 0 0.5px 1px rgba(0,0,0,0.1);">
+                                    <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #007AFF 0%, #0051D5 100%); border-radius: 2px; box-shadow: 0 0 4px rgba(0,122,255,0.4);"></div>
+                                </div>
+                                <div style="width: 40px; height: 3px; background: rgba(0,122,255,0.12); border-radius: 2px; overflow: hidden; box-shadow: inset 0 0.5px 1px rgba(0,0,0,0.1);">
+                                    <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #007AFF 0%, #0051D5 100%); border-radius: 2px; box-shadow: 0 0 4px rgba(0,122,255,0.4);"></div>
+                                </div>
+                                <div style="width: 40px; height: 3px; background: rgba(0,122,255,0.12); border-radius: 2px; overflow: hidden; box-shadow: inset 0 0.5px 1px rgba(0,0,0,0.1);">
+                                    <div style="width: 70%; height: 100%; background: linear-gradient(90deg, #007AFF 0%, #0051D5 100%); border-radius: 2px; box-shadow: 0 0 4px rgba(0,122,255,0.4);"></div>
+                                </div>
+                            </div>
+                            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">Flashing</div>
+                            <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500;">3 of 4</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div style="padding: 20px 24px;">
+                    <h4 style="margin-top: 0; margin-bottom: 8px;">Firmware Router</h4>
+                    <p style="margin-bottom: 12px; color: var(--text-secondary);">Automatic chip detection routes to correct firmware directory. Single <code>router.flash()</code> call handles detection, selection, and flashing.</p>
+                    <a href="#router" style="color: #007AFF; text-decoration: none; font-weight: 500; font-size: 14px;">See full documentation and code examples →</a>
+                </div>
+            </div>
+
+            <!-- Web Flasher Scaffold - Full Width Preview Card -->
+            <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; margin: 0 0 32px 0;">
+                <!-- Preview Window -->
+                <div style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 12px; overflow: hidden;">
+                    <div class="preview-zoom" style="display: grid; grid-template-columns: 1.1fr 1fr 1.1fr; gap: 12px; transform: scale(0.95); transform-origin: center; transition: transform 0.3s ease;">
+                        <!-- Panel 1: Configure -->
+                        <div class="interface-panel" style="pointer-events: none;">
+                            <div class="panel-header">
+                                <div class="panel-number" style="box-shadow: none;">1</div>
+                                <div class="panel-title" style="letter-spacing: -0.01em;">Configure</div>
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <div class="field-label" style="text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; font-weight: 600;">WiFi Network</div>
+                                <div class="field-value">MyNetwork</div>
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <div class="field-label" style="text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; font-weight: 600;">WiFi Password</div>
+                                <div class="field-value">••••••••</div>
+                            </div>
+                            <div>
+                                <div class="field-label" style="text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; font-weight: 600;">MQTT Broker</div>
+                                <div class="field-value">192.168.1.100</div>
+                            </div>
+                        </div>
+
+                        <!-- Panel 2: Connect & Flash -->
+                        <div class="interface-panel" style="pointer-events: none;">
+                            <div class="panel-header">
+                                <div class="panel-number" style="box-shadow: none;">2</div>
+                                <div class="panel-title" style="letter-spacing: -0.01em;">Connect & Flash</div>
+                            </div>
+                            <div style="margin-bottom: 12px;">
+                                <div class="field-label" style="margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; font-weight: 600;">Connection Status</div>
+                                <div class="status-connected">
+                                    <div class="status-dot"></div>
+                                    <span class="status-text">Connected to COM3</span>
+                                </div>
+                            </div>
+                            <div style="margin-bottom: 12px;">
+                                <div class="field-label" style="margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; font-weight: 600;">Flashing Progress</div>
+                                <div class="progress-bar-bg">
+                                    <div class="progress-bar-fill" style="width: 65%; background: linear-gradient(90deg, #007AFF 0%, #0051D5 100%);"></div>
+                                </div>
+                                <div class="progress-text" style="letter-spacing: -0.01em;">Flashing NVS partition... 65%</div>
+                            </div>
+                            <div class="button-group">
+                                <div class="button-primary" style="background: linear-gradient(135deg, #007AFF 0%, #0051D5 100%); letter-spacing: -0.01em;">Flash Device</div>
+                            </div>
+                        </div>
+
+                        <!-- Panel 3: Actions -->
+                        <div class="interface-panel" style="pointer-events: none;">
+                            <div class="panel-header">
+                                <div class="panel-number" style="box-shadow: none;">3</div>
+                                <div class="panel-title" style="letter-spacing: -0.01em;">Actions</div>
+                            </div>
+                            <div class="action-item">
+                                <div class="action-title" style="letter-spacing: -0.01em;">Read Config</div>
+                                <div class="action-description">Read current NVS from device</div>
+                            </div>
+                            <div class="action-item">
+                                <div class="action-title" style="letter-spacing: -0.01em;">Erase NVS</div>
+                                <div class="action-description">Clear all stored config</div>
+                            </div>
+                            <div class="action-item" style="margin-bottom: 0;">
+                                <div class="action-title" style="letter-spacing: -0.01em;">Download Binary</div>
+                                <div class="action-description">Save NVS partition as .bin</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div style="padding: 20px 24px;">
+                    <h4 style="margin-top: 0; margin-bottom: 8px;">Web Flasher Scaffold</h4>
+                    <p style="margin-bottom: 12px; color: var(--text-secondary);">JSON-based field definitions generate complete interfaces: forms, progress tracking, connection management. esptool-js integration provided.</p>
+                    <a href="#template" style="color: #007AFF; text-decoration: none; font-weight: 500; font-size: 14px;">See configuration examples and API reference →</a>
+                </div>
+            </div>
+
+        </div>
+        <!-- Code Examples -->
+        <div id="quickstart" class="lesson">
+            <h2>Quickstart</h2>
+            <p class="lesson-intro">Generate and flash an ESP32 config partition in under 30 seconds.</p>
+
+            <style>
+                .install-tabs-container {
+                    margin: 24px 0;
+                    border: 1px solid #2d2d2d;
+                    border-radius: 12px;
+                    background: #1d1d1f;
+                }
+                .install-tabs-container .tab-buttons-row {
+                    display: flex;
+                    gap: 0;
+                    border-bottom: 1px solid var(--border-color);
+                    background: transparent;
+                }
+                .install-pane pre {
+                    margin: 0 !important;
+                    border-radius: 0 0 12px 12px !important;
+                    border: none !important;
+                    background: transparent !important;
+                }
+                .install-pane .code-block-header {
+                    border-radius: 0 !important;
+                }
+                .install-pane .code-block-wrapper {
+                    margin: 0 !important;
+                }
+            </style>
+
+            <h3>Installation</h3>
+            <div class="install-tabs-container">
+                <div class="tab-buttons-row">
+                    <button class="install-tab-btn" data-tab="cdn" style="padding: 14px 24px; background: none; border: none; border-bottom: 3px solid transparent; color: var(--text-secondary); font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: -1px; transition: all 0.2s ease; letter-spacing: -0.016em;">Browser (CDN)</button>
+                    <button class="install-tab-btn" data-tab="npm" style="padding: 14px 24px; background: none; border: none; border-bottom: 3px solid #007AFF; color: white; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: -1px; transition: all 0.2s ease; letter-spacing: -0.016em;">Node.js (npm)</button>
+                </div>
+
+                <div id="install-cdn" class="install-pane" style="display: none;">
+                    <pre><code class="language-html">&lt;script src="https://jctoledo.github.io/active_wing/dist/nvs-generator.js"&gt;&lt;/script&gt;</code></pre>
+                </div>
+
+                <div id="install-npm" class="install-pane" style="display: block;">
+                    <pre><code class="language-bash">npm install @esp-web-tools/nvs-generator
+# or
+git clone https://github.com/adam-weber/esp-webflash-toolkit.git</code></pre>
+                </div>
+            </div>
+
+            <script>
+                document.querySelectorAll('.install-tab-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const tab = btn.dataset.tab;
+
+                        // Update buttons
+                        document.querySelectorAll('.install-tab-btn').forEach(b => {
+                            b.style.borderBottom = '3px solid transparent';
+                            b.style.color = 'var(--text-secondary)';
+                        });
+                        btn.style.borderBottom = '3px solid #007AFF';
+                        btn.style.color = 'white';
+
+                        // Update panes
+                        document.querySelectorAll('.install-pane').forEach(pane => {
+                            pane.style.display = 'none';
+                        });
+                        document.getElementById('install-' + tab).style.display = 'block';
+                    });
+                });
+            </script>
+
+            <h3>End-to-End Example</h3>
+            <p>Generate WiFi config and flash to ESP32—just 10 lines:</p>
+
+            <pre><code class="language-javascript">// 1. Generate the partition
+const generator = new NVSGenerator();
+const nvsBinary = generator.generate({
+    wifi: { ssid: "MyNetwork", password: "SecurePass123" }
+}, 0x6000);
+
+// 2. Flash it to device
+const port = await navigator.serial.requestPort();
+const esploader = await connectToESP32(port);
+
+await esploader.writeFlash({
+    fileArray: [{ data: toFlashString(nvsBinary), address: 0x9000 }],
+    flashSize: 'keep'
+});
+
+console.log('✓ Flashed! Device reboots with WiFi credentials.');</code></pre>
+
+            <div style="margin-top: 16px; padding: 12px 16px; background: var(--bg-tertiary); border-radius: 8px;">
+                <details style="cursor: pointer;">
+                    <summary style="font-size: 13px; font-weight: 600; color: var(--text-secondary); user-select: none;">Helper functions (copy these to your project)</summary>
+                    <pre style="margin-top: 12px; margin-bottom: 0;"><code class="language-javascript">// Connect to ESP32 via Web Serial
+async function connectToESP32(port) {
+    await port.open({ baudRate: 115200 });
+    const esploader = new ESPLoader(port, { debugLogging: false });
+    await esploader.connect();
+    return esploader;
+}
+
+// Convert Uint8Array to string format for esptool-js
+function toFlashString(bytes) {
+    return String.fromCharCode(...bytes);
+}</code></pre>
+                </details>
+            </div>
+
+            <div style="margin-top: 24px; padding: 16px 20px; background: rgba(0,122,255,0.08); border: 1px solid rgba(0,122,255,0.2); border-radius: 8px;">
+                <p style="margin: 0; font-size: 14px; color: var(--text-primary);"><strong style="color: #007AFF;">What you just did:</strong> Generated a 24KB NVS partition client-side and flashed it to ESP32 at <code style="background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px; font-size: 13px;">0x9000</code>. The device will now connect to WiFi on boot. No Python, no esptool.py, no command line.</p>
+            </div>
+        </div>
+
+        <!-- JavaScript API -->
+        <div id="links" class="lesson">
+            <h2>Links</h2>
+            <ul>
+                <li>Demo: <a href="/flasher/?project=active-wing">/flasher/?project=active-wing</a></li>
+                <li>Template: <code>npx create-esp32-flasher</code></li>
+                <li>ESP-IDF NVS: <a href="https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/nvs_flash.html">docs.espressif.com</a></li>
+                <li>Source: <a href="https://github.com/adam-weber/esp-webflash-toolkit">github.com/adam-weber/esp-webflash-toolkit</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="shared-nav.js"></script>
+    <script src="docs-scripts.js"></script>
+</body>
+</html>
