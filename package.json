@@ -1,0 +1,49 @@
+{
+  "name": "esp-webflash-toolkit",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Browser-based ESP32 flashing toolkit - use as library or scaffold your own flasher",
+  "keywords": ["esp32", "esp8266", "firmware", "flasher", "web-serial", "nvs"],
+  "author": "Adam Weber",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adam-weber/esp-webflash-toolkit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adam-weber/esp-webflash-toolkit/issues"
+  },
+  "homepage": "https://github.com/adam-weber/esp-webflash-toolkit#readme",
+  "main": "./dist/main-app.js",
+  "exports": {
+    ".": "./dist/main-app.js",
+    "./config-manager": "./dist/config-manager.js",
+    "./device-connection": "./dist/device-connection.js",
+    "./firmware-flasher": "./dist/firmware-flasher.js",
+    "./flasher-ui": "./dist/flasher-ui.js",
+    "./nvs-generator": "./dist/nvs-generator.js"
+  },
+  "bin": {
+    "esp-webflash": "./bin/cli.js"
+  },
+  "files": [
+    "dist/",
+    "templates/",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node bin/cli.js",
+    "prepublishOnly": "npm run build",
+    "serve-docs": "npx serve docs -l 3000"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "fs-extra": "^11.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

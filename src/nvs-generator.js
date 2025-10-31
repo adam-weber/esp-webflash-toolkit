@@ -422,12 +422,10 @@ function parseNVSConfig(binary, namespace = 'config') {
     return parsed[namespace] || {};
 }
 
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { NVSGenerator, generateNVSFromConfig, parseNVSConfig };
-}
+// ES6 export for module usage
+export { NVSGenerator, generateNVSFromConfig, parseNVSConfig };
 
-// Also expose globally for browser usage
+// Also expose globally for browser usage (legacy compatibility)
 if (typeof window !== 'undefined') {
     window.NVSGenerator = NVSGenerator;
     window.generateNVSFromConfig = generateNVSFromConfig;

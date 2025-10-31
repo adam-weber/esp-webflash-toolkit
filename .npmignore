@@ -1,0 +1,32 @@
+# Source files (only publish built dist/)
+src/
+
+# Documentation website (not needed in package)
+docs/
+
+# Development files
+.github/
+.claude/
+scripts/
+
+# Config files
+.gitignore
+.gitattributes
+
+# Documentation (except README)
+*.md
+!README.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+
+# Tests (if you add them later)
+test/
+tests/
+*.test.js
+*.spec.js

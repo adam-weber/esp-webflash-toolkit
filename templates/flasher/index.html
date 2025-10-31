@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESP32 Web Flasher</title>
-    <link rel="stylesheet" href="../shared-styles.css">
+    <!-- Styles are inline for portability -->
     <script>
         // Apply dark mode immediately to prevent flash
         (function() {
@@ -1536,12 +1536,12 @@ nvs.get_str("wifi_ssid", &amp;mut ssid)?;</pre>
     <!-- App-specific config -->
     <script src="js/projects-config.js"></script>
 
-    <!-- Core libraries from CDN (GitHub Pages) -->
-    <script src="https://jctoledo.github.io/active_wing/dist/nvs-generator.js"></script>
+    <!-- Core libraries (local) -->
+    <script src="js/nvs-generator.js"></script>
 
     <script type="module">
-        // Import modules from CDN
-        import { FlasherApp } from 'https://jctoledo.github.io/active_wing/dist/main-app.js';
+        // Import modules locally
+        import { FlasherApp } from './js/main-app.js';
 
         // Get projects from global scope (loaded by projects-config.js)
         const projects = window.PROJECTS || {};
@@ -1549,8 +1549,5 @@ nvs.get_str("wifi_ssid", &amp;mut ssid)?;</pre>
         // Initialize the application
         const app = new FlasherApp(projects);
     </script>
-
-    <script src="../shared-nav.js"></script>
-    <script src="../docs-scripts.js"></script>
 </body>
 </html>

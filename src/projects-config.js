@@ -2,7 +2,7 @@
 // Generated from sensors/*/project.json
 // DO NOT EDIT MANUALLY - your changes will be overwritten
 
-window.PROJECTS = {
+const PROJECTS = {
         'active-wing': {
             name: "Active Wing",
             description: "The reference implementation demonstrating real-time sensor fusion using Extended Kalman Filtering. This system fuses GPS and IMU data to provide accurate position and motion tracking, eliminating IMU drift through GPS corrections while maintaining high-frequency updates.",
@@ -17,8 +17,11 @@ window.PROJECTS = {
         }
 };
 
-// Export for Node.js environments
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = window.PROJECTS;
+// ES6 export for module usage
+export { PROJECTS };
+
+// Expose globally for browser usage
+if (typeof window !== 'undefined') {
+    window.PROJECTS = PROJECTS;
 }
 
