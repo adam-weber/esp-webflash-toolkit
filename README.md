@@ -8,9 +8,11 @@ Distributing firmware to end users typically requires them to install platform-s
 
 This toolkit takes a different approach: flash precompiled firmware once, then write configuration to NVS (Non-Volatile Storage) partitions generated in the browser. Users configure devices through web forms instead of editing code. Developers ship firmware binaries and host a static web page instead of maintaining installation documentation.
 
-The NVS generator implements the complete ESP-IDF NVS binary format in JavaScript, producing partitions that are byte-for-byte compatible with `nvs_partition_gen.py`. Your firmware reads them using standard ESP-IDF NVS APIs.
+Unlike solutions like [Improv Wi-Fi](https://www.improv-wifi.com/) that require adding SDKs and protocol handlers to your firmware, this toolkit works with existing ESP-IDF projects without code changes. The NVS generator implements the complete ESP-IDF NVS binary format in JavaScript, producing partitions that are byte-for-byte compatible with `nvs_partition_gen.py`. Your firmware reads them using standard ESP-IDF NVS APIs.
 
-This works well for production deployments where devices need unique configurations (WiFi credentials, API endpoints, calibration values), manufacturing batch operations, field reconfiguration without reflashing firmware, and projects supporting multiple ESP32 chip variants with automatic detection.
+Built-in firmware routing automatically detects chip type (ESP32, ESP32-C3, ESP32-S3, etc.) and loads the appropriate binary, so a single flasher works across hardware variants. Combined with [automated CI/CD workflows](#cicd-integration), you can tag a release and have firmware binaries automatically built and deployed to your web flasher.
+
+This works well for production deployments where devices need unique configurations (WiFi credentials, API endpoints, calibration values), manufacturing batch operations, field reconfiguration without reflashing firmware, and projects supporting multiple ESP32 chip variants.
 
 ## Installation
 
@@ -168,7 +170,7 @@ The toolkit uses the Web Serial API, which is currently implemented in Chromium-
 
 Firefox and Safari do not currently support the Web Serial API. The application detects unsupported browsers and provides appropriate messaging.
 
-## CI/CD Integration
+## <a name="cicd-integration"></a>CI/CD Integration
 
 The scaffolded template includes GitHub Actions workflow examples for automated firmware releases. When you tag a release, the workflow can build firmware, publish binaries, and update the web flasher configuration automatically.
 
