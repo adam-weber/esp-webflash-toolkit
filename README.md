@@ -8,6 +8,8 @@ Distributing firmware to end users typically requires them to install platform-s
 
 This toolkit takes a different approach: flash precompiled firmware once, then write configuration to NVS (Non-Volatile Storage) partitions generated **in the browser**. Users flash and configure devices through a website instead of editing code. Developers ship firmware binaries and host a static web page instead of maintaining installation documentation.
 
+![Preview of an example flashing utility](./docs/flasher-preview.png)
+
 Unlike solutions like [Improv Wi-Fi](https://www.improv-wifi.com/) that require adding SDKs and protocol handlers to your firmware, this works with existing ESP-IDF projects without code changes. The NVS generator implements the complete [ESP-IDF NVS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html) binary format in JavaScript, producing partitions that are byte-for-byte compatible. Your firmware reads them using standard ESP-IDF NVS APIs.
 
 Built-in firmware routing automatically detects chip type (ESP32-C3, ESP32-S3, etc.) and loads the appropriate binary, so a single flasher works across hardware variants. Combined with [automated CI/CD workflows](#cicd-integration), you can tag a release and have firmware binaries automatically built and deployed to your web flasher.
