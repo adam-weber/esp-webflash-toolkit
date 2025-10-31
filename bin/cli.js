@@ -23,7 +23,7 @@ async function scaffoldFlasher(targetDir) {
   try {
     // Check if template exists
     if (!fs.existsSync(TEMPLATE_DIR)) {
-      console.error('❌ Error: Template directory not found.');
+      console.error('Error: Template directory not found.');
       console.error('This may be a development environment. Run `npm run build` first.');
       process.exit(1);
     }
@@ -39,7 +39,7 @@ async function scaffoldFlasher(targetDir) {
     }
 
     // Copy template
-    console.log(`\n📦 Scaffolding ESP WebFlash toolkit in ${targetDir}...\n`);
+    console.log(`\nScaffolding ESP WebFlash toolkit in ${targetDir}...\n`);
     await fs.copy(TEMPLATE_DIR, targetDir);
 
     // Create package.json for the scaffolded project
@@ -84,14 +84,14 @@ https://github.com/adam-weber/esp-webflash-toolkit
 
     await fs.writeFile(path.join(targetDir, 'README.md'), readme);
 
-    console.log('✅ Done! Your ESP Web Flasher is ready.\n');
+    console.log('Done! Your ESP Web Flasher is ready.\n');
     console.log('Next steps:');
     console.log(`  cd ${targetDir}`);
     console.log('  npm run serve');
     console.log('\nThen open http://localhost:3000 in your browser.\n');
 
   } catch (error) {
-    console.error('❌ Error scaffolding project:', error.message);
+    console.error('Error scaffolding project:', error.message);
     process.exit(1);
   } finally {
     rl.close();
@@ -131,7 +131,7 @@ async function main() {
   if (command === 'create') {
     const projectName = args[1];
     if (!projectName) {
-      console.error('❌ Error: Please specify a project name');
+      console.error('Error: Please specify a project name');
       console.error('Usage: npx esp-webflash create <project-name>');
       process.exit(1);
     }
@@ -141,7 +141,7 @@ async function main() {
     const targetDir = process.cwd();
     await scaffoldFlasher(targetDir);
   } else {
-    console.error(`❌ Unknown command: ${command}`);
+    console.error(`Unknown command: ${command}`);
     showHelp();
     process.exit(1);
   }

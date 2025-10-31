@@ -14,10 +14,10 @@ const distDir = path.join(rootDir, 'dist');
 const templateJsDir = path.join(rootDir, 'templates', 'flasher', 'js');
 
 async function main() {
-  console.log('🔨 Building ESP WebFlash Toolkit...\n');
+  console.log('Building ESP WebFlash Toolkit...\n');
 
   // Clean dist directory
-  console.log('📁 Cleaning dist/...');
+  console.log('Cleaning dist/...');
   await fs.remove(distDir);
   await fs.ensureDir(distDir);
 
@@ -25,7 +25,7 @@ async function main() {
   const sourceFiles = await fs.readdir(srcDir);
   const jsFiles = sourceFiles.filter(f => f.endsWith('.js'));
 
-  console.log(`📦 Building ${jsFiles.length} modules...\n`);
+  console.log(`Building ${jsFiles.length} modules...\n`);
 
   // Build each module separately for better tree-shaking
   for (const file of jsFiles) {
@@ -44,22 +44,22 @@ async function main() {
         sourcemap: true,
         logLevel: 'warning'
       });
-      console.log(`  ✅ ${file}`);
+      console.log(`  ${file}`);
     } catch (error) {
-      console.error(`  ❌ ${file}: ${error.message}`);
+      console.error(`  Error: ${file}: ${error.message}`);
       process.exit(1);
     }
   }
 
   // Copy built files to templates for scaffolding
-  console.log('\n📋 Copying to templates/flasher/js/...');
+  console.log('\nCopying to templates/flasher/js/...');
   await fs.ensureDir(templateJsDir);
 
   for (const file of jsFiles) {
     const srcPath = path.join(distDir, file);
     const destPath = path.join(templateJsDir, file);
     await fs.copy(srcPath, destPath);
-    console.log(`  ✅ ${file}`);
+    console.log(`  ${file}`);
   }
 
   // Copy source maps too
@@ -70,7 +70,7 @@ async function main() {
     await fs.copy(srcPath, destPath);
   }
 
-  console.log('\n✨ Build complete!\n');
+  console.log('\nBuild complete!\n');
   console.log(`Built files: dist/`);
   console.log(`Template files: templates/flasher/js/`);
   console.log('');

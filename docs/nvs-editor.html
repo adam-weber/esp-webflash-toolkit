@@ -1023,7 +1023,7 @@
 
                     // Use first NVS partition by default
                     const nvs = nvsPartitions[0];
-                    this.log(`✓ Found ${nvsPartitions.length} NVS partition${nvsPartitions.length > 1 ? 's' : ''}`, 'success');
+                    this.log(` Found ${nvsPartitions.length} NVS partition${nvsPartitions.length > 1 ? 's' : ''}`, 'success');
                     this.log(`  Using "${nvs.label}" at 0x${nvs.offset.toString(16)} (${(nvs.size/1024).toFixed(1)}KB)`, 'info');
 
                     // Update input fields
@@ -1082,7 +1082,7 @@
                         this.showEmptyState();
                     } else {
                         this.configData = parsedData;
-                        this.log(`✓ Loaded ${Object.keys(parsedData).length} configuration entries`, 'success');
+                        this.log(` Loaded ${Object.keys(parsedData).length} configuration entries`, 'success');
                         this.renderConfig();
                         this.btnWrite.style.display = 'inline-block';
                         this.btnWrite.disabled = false;

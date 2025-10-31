@@ -1,16 +1,16 @@
 # ESP WebFlash Toolkit
 
-A browser-based toolkit for flashing ESP32 devices with runtime-configurable firmware. Built around a JavaScript implementation of ESP-IDF's NVS partition format that lets you generate config binaries on the fly.
+A browser-based toolkit for flashing ESP32 devices with runtime-configurable firmware. Built around a [JavaScript implementation](./src/nvs-generator.js) of ESP-IDF's NVS partition format that lets you generate config binaries on the fly.
 
 ## What This Solves
 
 Distributing firmware to end users typically requires them to install platform-specific tools (Python, esptool, drivers) and run command-line flashing sequences. Every configuration change requires recompiling and reflashing the entire firmware binary.
 
-This toolkit takes a different approach: flash precompiled firmware once, then write configuration to NVS (Non-Volatile Storage) partitions generated in the browser. Users configure devices through web forms instead of editing code. Developers ship firmware binaries and host a static web page instead of maintaining installation documentation.
+This toolkit takes a different approach: flash precompiled firmware once, then write configuration to NVS (Non-Volatile Storage) partitions generated **in the browser**. Users flash and configure devices through a website instead of editing code. Developers ship firmware binaries and host a static web page instead of maintaining installation documentation.
 
-Unlike solutions like [Improv Wi-Fi](https://www.improv-wifi.com/) that require adding SDKs and protocol handlers to your firmware, this toolkit works with existing ESP-IDF projects without code changes. The NVS generator implements the complete ESP-IDF NVS binary format in JavaScript, producing partitions that are byte-for-byte compatible with `nvs_partition_gen.py`. Your firmware reads them using standard ESP-IDF NVS APIs.
+Unlike solutions like [Improv Wi-Fi](https://www.improv-wifi.com/) that require adding SDKs and protocol handlers to your firmware, this works with existing ESP-IDF projects without code changes. The NVS generator implements the complete [ESP-IDF NVS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html) binary format in JavaScript, producing partitions that are byte-for-byte compatible. Your firmware reads them using standard ESP-IDF NVS APIs.
 
-Built-in firmware routing automatically detects chip type (ESP32, ESP32-C3, ESP32-S3, etc.) and loads the appropriate binary, so a single flasher works across hardware variants. Combined with [automated CI/CD workflows](#cicd-integration), you can tag a release and have firmware binaries automatically built and deployed to your web flasher.
+Built-in firmware routing automatically detects chip type (ESP32-C3, ESP32-S3, etc.) and loads the appropriate binary, so a single flasher works across hardware variants. Combined with [automated CI/CD workflows](#cicd-integration), you can tag a release and have firmware binaries automatically built and deployed to your web flasher.
 
 This works well for production deployments where devices need unique configurations (WiFi credentials, API endpoints, calibration values), manufacturing batch operations, field reconfiguration without reflashing firmware, and projects supporting multiple ESP32 chip variants.
 

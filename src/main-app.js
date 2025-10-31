@@ -83,7 +83,7 @@ export class FlasherApp {
                     });
 
                     if (chipType) {
-                        this.ui.log(`✓ Auto-reconnected to ${chipType}`, 'success');
+                        this.ui.log(`Auto-reconnected to ${chipType}`, 'success');
 
                         // Enable flash and write config buttons
                         this.btnFlash.disabled = false;
@@ -410,7 +410,7 @@ export class FlasherApp {
             });
 
             this.ui.updateStatus('success', 'Configuration written!', 'Config updated on device');
-            this.ui.log(`✓ Wrote ${nvsKeys.length} configuration values to device`, 'success');
+            this.ui.log(`Wrote ${nvsKeys.length} configuration values to device`, 'success');
 
             // Hide button after successful write
             this.btnWriteConfig.style.display = 'none';

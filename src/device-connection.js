@@ -296,7 +296,7 @@ export class DeviceConnection {
             // Read flash using esptool-js API
             const flashData = await this.espStub.readFlash(offset, size);
 
-            this.ui.log(`✓ Read ${flashData.length} bytes successfully`, 'success');
+            this.ui.log(`Read ${flashData.length} bytes successfully`, 'success');
             return new Uint8Array(flashData);
         } catch (error) {
             this.ui.log(`Failed to read flash: ${error.message}`, 'error');
