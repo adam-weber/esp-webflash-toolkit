@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 
+/**
+ * ESP WebFlash Toolkit CLI
+ * Command-line interface for scaffolding ESP32 web flasher projects
+ *
+ * @author Adam Weber (github: adam-weber)
+ */
+
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -49,33 +56,112 @@ async function scaffoldFlasher(targetDir) {
       description: "ESP32 Web Flasher",
       type: "module",
       scripts: {
-        serve: "npx serve . -l 3000"
+        "build:css": "npx tailwindcss -i input.css -o styles.css --minify",
+        "serve": "npm run build:css && npx serve . -l 3000",
+        "dev": "npx tailwindcss -i input.css -o styles.css --watch"
+      },
+      devDependencies: {
+        "tailwindcss": "^3.4.0"
       }
     };
 
     await fs.writeJSON(path.join(targetDir, 'package.json'), packageJson, { spaces: 2 });
+
+    // Build Tailwind CSS
+    console.log('Installing dependencies and building CSS...');
+    const { execSync } = await import('child_process');
+    try {
+      // Install Tailwind CSS
+      execSync('npm install', {
+        cwd: targetDir,
+        stdio: 'pipe'
+      });
+
+      // Build CSS
+      execSync('npm run build:css', {
+        cwd: targetDir,
+        stdio: 'pipe'
+      });
+      console.log('✓ Dependencies installed and CSS built successfully\n');
+    } catch (error) {
+      console.log('⚠ Could not build CSS automatically. Run "npm install && npm run build:css" manually.\n');
+    }
 
     // Create README for the scaffolded project
     const readme = `# ${path.basename(targetDir)}
 
 ESP32 Web Flasher - scaffolded from esp-webflash-toolkit
 
-## Usage
+## Local Development
 
-1. Start local server:
+1. Build CSS and start server:
    \`\`\`bash
    npm run serve
    \`\`\`
 
-2. Open http://localhost:3000 in Chrome/Edge (Web Serial API required)
+2. Open http://localhost:3000 in Chrome/Edge/Opera (Web Serial API required)
 
 3. Connect your ESP32 device and flash firmware
 
+### Development with Hot Reload
+
+\`\`\`bash
+npm run dev
+\`\`\`
+
+This watches for CSS changes and rebuilds automatically.
+
+## Deploy to GitHub Pages
+
+### One-Time Setup
+
+1. Push this project to GitHub
+2. Go to repository Settings → Pages
+3. Set Source to "GitHub Actions"
+
+### Automatic Deployment
+
+The included workflow (\`.github/workflows/deploy.yml\`) automatically:
+- Builds production-optimized Tailwind CSS
+- Deploys to GitHub Pages on every push to main
+
+Your flasher will be live at: \`https://[username].github.io/[repo-name]/\`
+
 ## Customization
 
-- Edit \`js/projects-config.js\` to add your projects
-- Modify \`index.html\` for UI changes
-- See \`.github-examples/\` for CI/CD integration
+- **Configuration**: Edit \`js/projects-config.js\` to add your projects and firmware URLs
+- **Styling**: Modify \`input.css\` for custom Tailwind styles
+- **Layout**: Edit \`index.html\` for UI changes
+- **Build Process**: Adjust \`tailwind.config.js\` for Tailwind configuration
+
+## Project Structure
+
+\`\`\`
+.
+├── index.html              # Main application
+├── input.css               # Tailwind source
+├── styles.css              # Built CSS (generated)
+├── tailwind.config.js      # Tailwind configuration
+├── js/                     # Application modules
+│   ├── main-app.js
+│   ├── config-manager.js
+│   ├── device-connection.js
+│   ├── firmware-flasher.js
+│   ├── flasher-ui.js
+│   ├── nvs-generator.js
+│   └── projects-config.js
+└── .github/
+    └── workflows/
+        └── deploy.yml      # GitHub Pages deployment
+
+\`\`\`
+
+## Browser Support
+
+Requires browsers with Web Serial API:
+- Chrome 89+
+- Edge 89+
+- Opera 75+
 
 ## Documentation
 
@@ -88,7 +174,8 @@ https://github.com/adam-weber/esp-webflash-toolkit
     console.log('Next steps:');
     console.log(`  cd ${targetDir}`);
     console.log('  npm run serve');
-    console.log('\nThen open http://localhost:3000 in your browser.\n');
+    console.log('\nThen open http://localhost:3000 in your browser.');
+    console.log('\nFor GitHub Pages deployment, see README.md\n');
 
   } catch (error) {
     console.error('Error scaffolding project:', error.message);

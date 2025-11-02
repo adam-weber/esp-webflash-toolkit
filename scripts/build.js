@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 
+/**
+ * Build Script for ESP WebFlash Toolkit
+ * Bundles source files for distribution
+ *
+ * @author Adam Weber (github: adam-weber)
+ */
+
 import { build } from 'esbuild';
 import fs from 'fs-extra';
 import path from 'path';
@@ -31,6 +38,13 @@ async function main() {
   for (const file of jsFiles) {
     const inputPath = path.join(srcDir, file);
     const outputPath = path.join(distDir, file);
+
+    // Special handling for non-module files
+    if (file === 'projects-config.js' || file === 'nvs-generator.js') {
+      await fs.copy(inputPath, outputPath);
+      console.log(`  ${file} (copied)`);
+      continue;
+    }
 
     try {
       await build({

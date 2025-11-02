@@ -1,6 +1,8 @@
 /**
  * Configuration Management for ESP32 Web Flasher
  * Handles loading, saving, and rendering configuration forms
+ *
+ * @author Adam Weber (github: adam-weber)
  */
 
 export class ConfigManager {
@@ -9,12 +11,12 @@ export class ConfigManager {
     }
 
     loadConfig() {
-        const saved = localStorage.getItem('active-wing-config');
+        const saved = localStorage.getItem('esp-flasher-config');
         return saved ? JSON.parse(saved) : {};
     }
 
     saveConfig() {
-        localStorage.setItem('active-wing-config', JSON.stringify(this.config));
+        localStorage.setItem('esp-flasher-config', JSON.stringify(this.config));
     }
 
     clearConfig() {
@@ -78,6 +80,8 @@ export class ConfigManager {
                             placeholder="${field.placeholder || ''}"
                             ${field.default ? `value="${field.default}"` : ''}
                             ${field.required ? 'required' : ''}
+                            ${field.pattern ? `pattern="${field.pattern}"` : ''}
+                            ${field.pattern ? `title="${field.help || 'Invalid format'}"` : ''}
                             aria-required="${field.required ? 'true' : 'false'}"
                             aria-describedby="${field.help ? fieldId + '-help' : ''}"
                             data-section="${section.id}"

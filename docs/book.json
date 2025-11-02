@@ -1,0 +1,27 @@
+{
+  "title": "ESP WebFlash Toolkit Documentation",
+  "description": "Browser-based ESP32 flashing toolkit - use as library or scaffold your own flasher",
+  "author": "Adam Weber",
+  "language": "en",
+  "root": ".",
+
+  "plugins": [
+    "theme-default"
+  ],
+
+  "pluginsConfig": {
+    "theme-default": {
+      "showLevel": true
+    }
+  },
+
+  "variables": {
+    "version": "0.1.0"
+  },
+
+  "links": {
+    "sidebar": {
+      "GitHub Repository": "https://github.com/adam-weber/esp-webflash-toolkit"
+    }
+  }
+}

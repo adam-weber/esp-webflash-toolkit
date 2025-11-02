@@ -1,24 +1,90 @@
-// Auto-generated project configuration
-// Generated from sensors/*/project.json
-// DO NOT EDIT MANUALLY - your changes will be overwritten
+/**
+ * Auto-generated project configuration
+ * Generated from sensors project files
+ *
+ * @author Adam Weber (github: adam-weber)
+ */
 
 const PROJECTS = {
-        'active-wing': {
-            name: "Active Wing",
-            description: "The reference implementation demonstrating real-time sensor fusion using Extended Kalman Filtering. This system fuses GPS and IMU data to provide accurate position and motion tracking, eliminating IMU drift through GPS corrections while maintaining high-frequency updates.",
-            hardware: ["ESP32-C3 Development Board", "WT901 9-axis IMU (UART @ 9600 baud)", "NEO-6M GPS Module (UART @ 9600 baud)", "WS2812 RGB LED for status indication"],
-            software: ["Chrome or Edge browser (for web flasher)", "Windows, macOS, or Linux", "Python 3.x (for telemetry receiver tools)"],
-            firmwareUrl: "https://github.com/adam-weber/esp-webflash-toolkit/releases/download/latest/active-wing.bin",
-            chip: "esp32c3",
-            target: "riscv32imc-esp-espidf",
-            configSections: [{"id": "wifi", "title": "WiFi", "description": "Connect to your wireless network", "fields": [{"id": "ssid", "label": "Network Name (SSID)", "type": "text", "placeholder": "MyWiFiNetwork", "required": true, "nvsKey": "wifi_ssid"}, {"id": "password", "label": "Password", "type": "password", "placeholder": "WiFi password", "required": true, "nvsKey": "wifi_pass"}]}, {"id": "mqtt", "title": "MQTT", "description": "Optional: Send status updates to MQTT broker", "fields": [{"id": "broker", "label": "Broker URL", "type": "text", "placeholder": "mqtt://192.168.1.100:1883", "required": false, "nvsKey": "mqtt_broker"}, {"id": "username", "label": "Username", "type": "text", "placeholder": "mqtt_user", "required": false, "nvsKey": "mqtt_user"}, {"id": "password", "label": "Password", "type": "password", "placeholder": "mqtt_password", "required": false, "nvsKey": "mqtt_pass"}]}, {"id": "tcp", "title": "TCP Telemetry", "description": "Stream real-time data to your computer (20 Hz)", "fields": [{"id": "server", "label": "Server IP", "type": "text", "placeholder": "192.168.1.100", "required": true, "help": "IP address of computer running tcp_telemetry_server.py", "nvsKey": "tcp_server"}, {"id": "port", "label": "Port", "type": "number", "placeholder": "9000", "default": 9000, "required": true, "nvsKey": "tcp_port"}]}, {"id": "led", "title": "Onboard LED", "description": "Configure the onboard LED flash interval", "fields": [{"id": "flash_interval", "label": "Flash Interval (ms)", "type": "number", "placeholder": "1000", "default": 1000, "required": false, "help": "Time in milliseconds between LED toggles (500 = 0.5s, 1000 = 1s, 2000 = 2s)", "nvsKey": "led_flash_ms"}]}],
+        'morse-code-blinker': {
+            name: "Morse Code Blinker",
+            description: "Flash custom morse code patterns on your ESP32's built-in LED. Connect to WiFi and watch your LED transmit messages in morse code. Perfect for getting started with ESP32 web flashing.",
+            hardware: ["ESP32 Development Board (any variant)", "Built-in LED (usually on GPIO 2)"],
+            software: ["Chrome, Edge, or Opera browser (Web Serial API support)"],
+            firmwareUrl: "https://github.com/adam-weber/esp-webflash-toolkit/releases/download/latest/morse-blinker.bin",
+            chip: "esp32",
+            target: "xtensa-esp32-espidf",
+            navbarLinks: [
+                {label: "GitHub", url: "https://github.com/adam-weber/esp-webflash-toolkit"},
+                {label: "Docs", url: "https://github.com/adam-weber/esp-webflash-toolkit#readme"}
+            ],
+            configSections: [
+                {
+                    "id": "wifi",
+                    "title": "WiFi Configuration",
+                    "description": "Connect your ESP32 to your wireless network",
+                    "fields": [
+                        {
+                            "id": "ssid",
+                            "label": "Network Name (SSID)",
+                            "type": "text",
+                            "placeholder": "MyWiFiNetwork",
+                            "required": true,
+                            "nvsKey": "wifi_ssid"
+                        },
+                        {
+                            "id": "password",
+                            "label": "Password",
+                            "type": "password",
+                            "placeholder": "WiFi password",
+                            "required": true,
+                            "nvsKey": "wifi_pass"
+                        }
+                    ]
+                },
+                {
+                    "id": "morse",
+                    "title": "Morse Code Settings",
+                    "description": "Configure the LED pin and morse code pattern",
+                    "fields": [
+                        {
+                            "id": "gpio_pin",
+                            "label": "GPIO Pin Number",
+                            "type": "number",
+                            "placeholder": "2",
+                            "default": 2,
+                            "required": true,
+                            "help": "GPIO pin connected to the LED (usually GPIO 2 for built-in LED)",
+                            "nvsKey": "led_gpio"
+                        },
+                        {
+                            "id": "morse_pattern",
+                            "label": "Morse Code Pattern",
+                            "type": "text",
+                            "placeholder": "... --- ...",
+                            "default": "... --- ...",
+                            "required": true,
+                            "pattern": "^[.\\- ]+$",
+                            "help": "Use dots (.) for short blinks, dashes (-) for long blinks, and spaces for pauses. Example: '... --- ...' = SOS",
+                            "nvsKey": "morse_pattern"
+                        },
+                        {
+                            "id": "dot_duration",
+                            "label": "Dot Duration (ms)",
+                            "type": "number",
+                            "placeholder": "200",
+                            "default": 200,
+                            "required": true,
+                            "help": "Duration of a dot in milliseconds. Dash is 3x this value (200ms dot = 600ms dash)",
+                            "nvsKey": "morse_dot_ms"
+                        }
+                    ]
+                }
+            ],
             nvsPartition: {"name": "nvs", "offset": "0x9000", "size": "0x6000", "namespace": "config"},
-            documentation: {"url": "https://github.com/adam-weber/esp-webflash-toolkit/blob/main/sensors/active-wing/README.md", "label": "Wiring Diagram & Setup Guide"}
+            documentation: {"url": "https://github.com/adam-weber/esp-webflash-toolkit#getting-started", "label": "Getting Started Guide"}
         }
 };
-
-// ES6 export for module usage
-export { PROJECTS };
 
 // Expose globally for browser usage
 if (typeof window !== 'undefined') {

@@ -1,6 +1,8 @@
 /**
  * Device Connection Handler for ESP32 Web Flasher
  * Manages serial connection and chip detection
+ *
+ * @author Adam Weber (github: adam-weber)
  */
 
 export class DeviceConnection {
@@ -9,6 +11,7 @@ export class DeviceConnection {
         this.transport = null;
         this.espStub = null;
         this.isConnected = false;
+        this.cancelController = null;
     }
 
     getChipOverrides() {
@@ -26,6 +29,33 @@ export class DeviceConnection {
         const overrides = this.getChipOverrides();
         delete overrides[detectedChip];
         localStorage.setItem('chip-overrides', JSON.stringify(overrides));
+    }
+
+    showCancelButton() {
+        const statusBox = document.getElementById('status-box');
+
+        // Add cancel button if not already present
+        if (!document.getElementById('connection-cancel-btn')) {
+            const cancelBtn = document.createElement('button');
+            cancelBtn.id = 'connection-cancel-btn';
+            cancelBtn.className = 'btn btn-secondary';
+            cancelBtn.style.cssText = 'margin-top: 12px; font-size: 13px; padding: 8px 16px;';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.addEventListener('click', () => {
+                if (this.cancelController) {
+                    this.cancelController.abort();
+                    this.ui.log('Connection cancelled by user', 'warning');
+                }
+            });
+            statusBox.appendChild(cancelBtn);
+        }
+    }
+
+    hideCancelButton() {
+        const cancelBtn = document.getElementById('connection-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.remove();
+        }
     }
 
     async showChipMismatchDialog(expectedChip, detectedChip) {
@@ -93,6 +123,10 @@ export class DeviceConnection {
             await this.disconnect();
         }
 
+        // Create a new cancel controller for this connection attempt
+        this.cancelController = new AbortController();
+        const signal = this.cancelController.signal;
+
         // Get skip chip check option from developer options
         const devSkipChipCheck = options.skipChipCheck || false;
 
@@ -113,11 +147,22 @@ export class DeviceConnection {
                 }
             }
 
+            // Check if cancelled
+            if (signal.aborted) {
+                throw new Error('Connection cancelled by user');
+            }
+
             this.ui.log('Opening serial port...', 'info');
             this.ui.updateStatus('waiting', 'Opening port...', 'Establishing connection');
+            this.showCancelButton();
 
             // Import Transport and ESPLoader from esptool-js
             const { Transport, ESPLoader } = await import('https://unpkg.com/esptool-js@0.4.5/bundle.js');
+
+            // Check if cancelled
+            if (signal.aborted) {
+                throw new Error('Connection cancelled by user');
+            }
 
             this.transport = new Transport(port, true);
 
@@ -141,9 +186,17 @@ export class DeviceConnection {
                 }, 15000); // 15 second timeout
             });
 
+            // Add cancellation promise
+            const cancelPromise = new Promise((_, reject) => {
+                signal.addEventListener('abort', () => {
+                    reject(new Error('Connection cancelled by user'));
+                });
+            });
+
             const chipType = await Promise.race([
                 this.espStub.main(),
-                timeoutPromise
+                timeoutPromise,
+                cancelPromise
             ]);
 
             this.ui.log('Chip: ' + chipType, 'info');
@@ -200,6 +253,7 @@ export class DeviceConnection {
             }
 
             this.isConnected = true;
+            this.hideCancelButton();
             this.ui.updateStatus('connected', 'Device connected', 'Ready to flash firmware');
             this.ui.log(`Connected to ${chipType}`, 'success');
 
@@ -207,6 +261,7 @@ export class DeviceConnection {
 
         } catch (error) {
             // Clean up on error
+            this.hideCancelButton();
             await this.disconnect();
             // Only call handleConnectionError if we haven't already set a specific status
             if (!error.isChipMismatch) {
@@ -217,6 +272,13 @@ export class DeviceConnection {
     }
 
     handleConnectionError(error) {
+        // Handle user cancellation during connection
+        if (error.message && error.message.includes('cancelled by user')) {
+            this.ui.log('Connection cancelled by user', 'warning');
+            this.ui.updateStatus('waiting', 'Connection cancelled', 'Click "Connect Device" to try again');
+            return;
+        }
+
         // Handle port already open
         if (error.message && error.message.includes('port is already open')) {
             this.ui.log('Port is already open - please refresh the page', 'error');
@@ -231,7 +293,7 @@ export class DeviceConnection {
             return;
         }
 
-        // Handle user cancellation
+        // Handle user cancellation during port selection
         if (error.message && error.message.includes('No port selected')) {
             this.ui.log('Port selection cancelled by user', 'warning');
             this.ui.updateStatus('waiting', 'Connection cancelled', 'Click "Connect Device" to try again');

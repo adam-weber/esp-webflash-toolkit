@@ -1,26 +1,24 @@
 # ESP WebFlash Toolkit
 
-A browser-based toolkit for flashing ESP32 devices with runtime-configurable firmware. Built around a [JavaScript implementation](./src/nvs-generator.js) of ESP-IDF's NVS partition format that lets you generate config binaries on the fly.
+A browser-based toolkit built on [esptool-js](https://github.com/espressif/esptool-js) for flashing ESP32 devices with runtime-configurable firmware. Built around a [JavaScript implementation](./src/nvs-generator.js) of ESP-IDF's NVS partition format that lets you generate config binaries on the fly.
 
-## What This Solves
+---
 
-Distributing firmware to end users typically requires them to install platform-specific tools (Python, esptool, drivers) and run command-line flashing sequences. Every configuration change requires recompiling and reflashing the entire firmware binary.
+Traditional firmware distribution requires end users to install platform-specific tooling and run command-line procedures. Every configuration change means recompiling and reflashing the entire binary. We've taken a different approach: **flash precompiled firmware once, then manage configurations through NVS partitions generated in the browser**.
 
-This toolkit takes a different approach: flash precompiled firmware once, then write configuration to NVS (Non-Volatile Storage) partitions generated **in the browser**. Users flash and configure devices through a website instead of editing code. Developers ship firmware binaries and host a static web page instead of maintaining installation documentation.
+This project implements the complete [ESP-IDF NVS binary format](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html) in JavaScript, producing partitions that are byte-for-byte compatible with ESP-IDF. Your firmware reads them using standard NVS APIs without modifications. Unlike solutions like Improv Wi-Fi, this works with existing ESP-IDF projects out of the box.
 
-![Preview of an example flashing utility](./docs/flasher-preview.png)
+Built-in firmware routing detects chip variants automatically and loads the appropriate binary. Combined with [automated CI/CD](#cicd-integration), you can tag a release and have firmware built and deployed automatically. Particularly useful for production deployments, manufacturing operations, field reconfiguration, and multi-variant projects.
 
-Unlike solutions like [Improv Wi-Fi](https://www.improv-wifi.com/) that require adding SDKs and protocol handlers to your firmware, this works with existing ESP-IDF projects without code changes. The NVS generator implements the complete [ESP-IDF NVS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html) binary format in JavaScript, producing partitions that are byte-for-byte compatible. Your firmware reads them using standard ESP-IDF NVS APIs.
+Available as both a complete web flasher and modular components for integration into existing tooling.
 
-Built-in firmware routing automatically detects chip type (ESP32-C3, ESP32-S3, etc.) and loads the appropriate binary, so a single flasher works across hardware variants. Combined with [automated CI/CD workflows](#cicd-integration), you can tag a release and have firmware binaries automatically built and deployed to your web flasher.
-
-This works well for production deployments where devices need unique configurations (WiFi credentials, API endpoints, calibration values), manufacturing batch operations, field reconfiguration without reflashing firmware, and projects supporting multiple ESP32 chip variants.
+### **[Launch the example web flasher ↗](https://adam-weber.github.io/esp-webflash-toolkit/flasher.html)**
 
 ## Installation
 
 ```bash
 # Scaffold a complete flasher application
-npx esp-webflash-toolkit create my-flasher
+npx esp-webflash-toolkit create my-device-flasher
 
 # Or install as a library
 npm install esp-webflash-toolkit
@@ -44,37 +42,100 @@ Configure your project by editing `js/projects-config.js`:
 export const PROJECTS = {
   'my-device': {
     name: 'My ESP32 Device',
+    description: 'A brief description shown in the UI',
     firmwareUrl: 'https://github.com/user/repo/releases/download/v1.0/firmware.bin',
     chip: 'esp32c3',
+    target: 'riscv32imc-esp-espidf', // Rust target (optional)
+
+    // Navbar links shown in top navigation (optional)
+    navbarLinks: [
+      {label: 'GitHub', url: 'https://github.com/user/repo'},
+      {label: 'Docs', url: 'https://github.com/user/repo#readme'}
+    ],
+
+    // Hardware requirements shown in UI
+    hardware: [
+      'ESP32-C3 Development Board',
+      'USB-C cable for data transfer'
+    ],
+
+    // Software requirements shown in UI
+    software: [
+      'Chrome, Edge, or Opera browser (Web Serial API support)'
+    ],
 
     configSections: [{
       id: 'wifi',
       title: 'WiFi Configuration',
+      description: 'Connect your device to your wireless network',
       fields: [
         {
           id: 'ssid',
           label: 'Network Name',
           type: 'text',
+          placeholder: 'MyWiFiNetwork',
           nvsKey: 'wifi_ssid',
-          required: true
+          required: true,
+          help: 'The SSID of your WiFi network'
         },
         {
           id: 'password',
           label: 'Password',
           type: 'password',
+          placeholder: 'WiFi password',
           nvsKey: 'wifi_pass',
+          required: true
+        },
+        {
+          id: 'morse_pattern',
+          label: 'Morse Code Pattern',
+          type: 'text',
+          placeholder: '... --- ...',
+          default: '... --- ...',
+          pattern: '^[.\\- ]+$',  // Regex validation
+          help: 'Use dots (.) for short blinks, dashes (-) for long blinks',
+          nvsKey: 'morse_pattern',
+          required: true
+        },
+        {
+          id: 'gpio_pin',
+          label: 'GPIO Pin Number',
+          type: 'number',
+          default: 2,
+          nvsKey: 'led_gpio',
           required: true
         }
       ]
     }],
 
     nvsPartition: {
+      name: 'nvs',
       offset: '0x9000',
-      size: '0x6000'
+      size: '0x6000',
+      namespace: 'config'
+    },
+
+    documentation: {
+      url: 'https://github.com/user/repo#readme',
+      label: 'Getting Started Guide'
     }
   }
 };
 ```
+
+### Field Configuration Options
+
+Each field in `configSections` supports the following options:
+
+- **id** (required) - Unique identifier for the field
+- **label** (required) - Display label shown in the UI
+- **type** (required) - HTML input type: `text`, `password`, `number`, `email`, etc.
+- **nvsKey** (required) - The key name used in the NVS partition
+- **required** (boolean) - Whether the field is mandatory
+- **default** - Default value pre-filled in the form
+- **placeholder** - Placeholder text shown in empty fields
+- **pattern** - Regex pattern for HTML5 validation (e.g., `^[0-9]+$` for numbers only)
+- **help** - Help text displayed below the field, also used as validation error message
 
 The flasher generates web forms from this configuration, validates user input, generates NVS binaries, and handles the complete flashing sequence.
 

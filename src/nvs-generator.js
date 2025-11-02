@@ -5,6 +5,8 @@
  * to ESP32 devices. This is a client-side JavaScript implementation of the
  * ESP-IDF nvs_partition_gen.py functionality.
  *
+ * @author Adam Weber (github: adam-weber)
+ *
  * NVS Format:
  * - Partition divided into pages (4096 bytes each)
  * - Each page contains entries (32 bytes each)
@@ -422,10 +424,7 @@ function parseNVSConfig(binary, namespace = 'config') {
     return parsed[namespace] || {};
 }
 
-// ES6 export for module usage
-export { NVSGenerator, generateNVSFromConfig, parseNVSConfig };
-
-// Also expose globally for browser usage (legacy compatibility)
+// Expose to browser global scope
 if (typeof window !== 'undefined') {
     window.NVSGenerator = NVSGenerator;
     window.generateNVSFromConfig = generateNVSFromConfig;

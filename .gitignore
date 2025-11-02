@@ -6,6 +6,12 @@ pnpm-lock.yaml
 
 # Build output
 dist/
+templates/flasher/js/
+
+# GitBook build artifacts
+_book/
+.gitbook/
+*.pdf
 
 # OS files
 .DS_Store
@@ -39,6 +45,10 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+
+# Test instances
+test-*/
+my-flasher/
 
 # Temporary files
 *.tmp

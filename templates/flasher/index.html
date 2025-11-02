@@ -4,21 +4,75 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESP32 Web Flasher</title>
-    <!-- Styles are inline for portability -->
-    <script>
-        // Apply dark mode immediately to prevent flash
-        (function() {
-            const savedMode = localStorage.getItem('darkMode');
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            if (savedMode === 'dark' || (!savedMode && prefersDark)) {
-                document.documentElement.classList.add('dark-mode');
-            }
-        })();
-    </script>
+    <link rel="stylesheet" href="styles.css">
     <style>
         /* Flasher-specific styles only */
         body.dev-panel-open {
             overflow: hidden;
+        }
+
+        /* Header */
+        .app-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 44px;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left));
+        }
+
+        .app-header-content {
+            width: 100%;
+            max-width: 1400px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 48px;
+        }
+
+        .app-header-title {
+            font-size: 21px;
+            font-weight: 600;
+            color: #1d1d1f;
+            letter-spacing: -0.022em;
+            margin: 0;
+        }
+
+        .app-header-nav {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .app-header-link {
+            font-size: 12px;
+            color: #1d1d1f;
+            text-decoration: none;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            transition: opacity 0.2s;
+            opacity: 0.8;
+        }
+
+        .app-header-link:hover {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .app-header-nav {
+                gap: 20px;
+            }
+
+            .app-header-link {
+                font-size: 11px;
+            }
         }
 
         /* Main layout: Starts centered, transitions to 3 columns */
@@ -348,7 +402,7 @@
         }
 
         .requirement-list li::before {
-            content: '•';
+            content: '✓';
             position: absolute;
             left: 0;
             width: 24px;
@@ -1232,7 +1286,15 @@
     </style>
 </head>
 <body>
-    <div id="navbar-container"></div>
+    <!-- App Header -->
+    <header class="app-header">
+        <div class="app-header-content">
+            <h1 class="app-header-title" id="app-header-title">ESP32 Web Flasher</h1>
+            <nav class="app-header-nav" id="app-header-nav">
+                <!-- Nav items populated dynamically from project config -->
+            </nav>
+        </div>
+    </header>
 
     <div class="main-content expanded" id="main-content">
         <!-- Left Panel: Instructions -->
@@ -1423,124 +1485,12 @@
         </div>
     </div>
 
-    <!-- About Modal -->
-    <div class="dev-panel-backdrop" id="about-backdrop"></div>
-    <div class="dev-options-panel" id="about-panel">
-        <div class="dev-options-header">
-            <h2 class="dev-options-title">About This Flasher</h2>
-            <div class="dev-options-actions">
-                <button class="dev-action-btn" id="about-close" aria-label="Close" title="Close">×</button>
-            </div>
-        </div>
-        <div class="dev-options-body" style="padding: 48px 40px; overflow-y: auto;">
-            <p style="font-size: 32px; color: #1d1d1f; line-height: 1.125; margin-bottom: 16px; font-weight: 600; letter-spacing: -0.015em;">
-                Distribute firmware, without the toolchain.
-            </p>
-            <p style="font-size: 19px; color: #6e6e73; line-height: 1.42; margin-bottom: 56px; font-weight: 400; letter-spacing: 0.012em;">
-                Generate NVS partitions in JavaScript. Flash pre-compiled firmware with runtime configuration. No toolchain installation required.
-            </p>
-
-            <div style="margin-bottom: 72px;">
-                <h3 style="font-size: 12px; color: #86868b; margin-bottom: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;">The problem</h3>
-                <p style="font-size: 15px; color: #1d1d1f; line-height: 1.6; margin-bottom: 24px; letter-spacing: -0.016em;">
-                    Traditionally, ESP32 configuration requires hardcoding values in firmware or manually creating NVS partition CSVs, running <code style="background: #f5f5f7; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">nvs_partition_gen.py</code>, and flashing with esptool. Users need Python, ESP-IDF, and must recompile for every config change.
-                </p>
-                <p style="font-size: 15px; color: #1d1d1f; line-height: 1.6; margin-bottom: 24px; letter-spacing: -0.016em;">
-                    This flasher generates ESP-IDF NVS partition binaries <strong>in the browser</strong> and flashes them alongside pre-compiled firmware. Users enter WiFi credentials, MQTT brokers, API endpoints, sensor calibration, PID parameters, or runtime config via web forms. The flasher generates NVS binary, validates chip type, downloads firmware from GitHub releases, and flashes both (firmware at 0x0, NVS at 0x9000) using Web Serial API.
-                </p>
-                <p style="font-size: 15px; color: #1d1d1f; line-height: 1.6; letter-spacing: -0.016em;">
-                    Includes error handling, progress indicators, serial monitoring, chip validation with override, custom firmware upload, and localStorage persistence. Client-side only—no backend, no network transmission of credentials.
-                </p>
-            </div>
-
-            <div style="margin-bottom: 72px;">
-                <h3 style="font-size: 12px; color: #86868b; margin-bottom: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;">How it works</h3>
-                <div style="display: grid; gap: 24px;">
-                    <div>
-                        <div style="font-size: 17px; color: #1d1d1f; font-weight: 500; margin-bottom: 4px; letter-spacing: -0.022em;">1. Define your config schema</div>
-                        <div style="font-size: 15px; color: #6e6e73; line-height: 1.47; letter-spacing: -0.016em; margin-bottom: 12px;">Create <code style="background: #f5f5f7; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">project.json</code> with field definitions. Forms auto-generate.</div>
-                        <pre style="background: #1d1d1f; color: #f5f5f7; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; line-height: 1.5; margin: 0;">
-{
-  "configSections": [{
-    "id": "wifi",
-    "fields": [{
-      "id": "ssid",
-      "nvsKey": "wifi_ssid",
-      "type": "text"
-    }]
-  }]
-}</pre>
-                    </div>
-                    <div>
-                        <div style="font-size: 17px; color: #1d1d1f; font-weight: 500; margin-bottom: 4px; letter-spacing: -0.022em;">2. NVS binary generation</div>
-                        <div style="font-size: 15px; color: #6e6e73; line-height: 1.47; letter-spacing: -0.016em; margin-bottom: 12px;">User enters values. JavaScript generates valid ESP-IDF NVS partition with proper page headers, entry structures, and CRC32 checksums.</div>
-                        <pre style="background: #1d1d1f; color: #f5f5f7; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; line-height: 1.5; margin: 0;">
-// 4KB pages, 32-byte entries
-// Page header: state, seq, version
-// Entries: namespace, type, span, key, data
-// CRC32 over entry metadata
-const binary = generator.generate({
-  config: { wifi_ssid: "MyNetwork" }
-}, 0x6000);  // 24KB partition</pre>
-                    </div>
-                    <div>
-                        <div style="font-size: 17px; color: #1d1d1f; font-weight: 500; margin-bottom: 4px; letter-spacing: -0.022em;">3. Read from firmware</div>
-                        <div style="font-size: 15px; color: #6e6e73; line-height: 1.47; letter-spacing: -0.016em; margin-bottom: 12px;">Standard ESP-IDF NVS API. Works with Rust, C, Arduino.</div>
-                        <pre style="background: #1d1d1f; color: #f5f5f7; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; line-height: 1.5; margin: 0;">
-// Rust (esp-idf-svc)
-let nvs = EspNvs::new(partition, "config", true)?;
-let mut ssid = String::new();
-nvs.get_str("wifi_ssid", &amp;mut ssid)?;</pre>
-                    </div>
-                </div>
-            </div>
-
-            <div style="margin-bottom: 72px;">
-                <h3 style="font-size: 12px; color: #86868b; margin-bottom: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;">Implementation</h3>
-                <div style="display: grid; gap: 16px;">
-                    <div style="font-size: 15px; color: #1d1d1f; line-height: 1.47; letter-spacing: -0.016em;">
-                        <strong>NVS Format:</strong> Full ESP-IDF NVS binary format implementation (page headers, entry structures, namespace hashing, CRC32)
-                    </div>
-                    <div style="font-size: 15px; color: #1d1d1f; line-height: 1.47; letter-spacing: -0.016em;">
-                        <strong>Type Support:</strong> U8, I8, U16, I16, U32, I32, strings, blobs with multi-span entries for large values
-                    </div>
-                    <div style="font-size: 15px; color: #1d1d1f; line-height: 1.47; letter-spacing: -0.016em;">
-                        <strong>Multi-File Flashing:</strong> Automatically flashes firmware (offset 0x0) + NVS partition (offset 0x9000) in sequence
-                    </div>
-                    <div style="font-size: 15px; color: #1d1d1f; line-height: 1.47; letter-spacing: -0.016em;">
-                        <strong>Web Serial API:</strong> Chrome/Edge/Opera only. HTTPS required in production (localhost OK for dev)
-                    </div>
-                    <div style="font-size: 15px; color: #1d1d1f; line-height: 1.47; letter-spacing: -0.016em;">
-                        <strong>localStorage Persistence:</strong> Configuration auto-saves and restores across sessions
-                    </div>
-                    <div style="font-size: 15px; color: #1d1d1f; line-height: 1.47; letter-spacing: -0.016em;">
-                        <strong>Developer Options:</strong> Custom firmware upload, skip chip validation, verbose logging, baud rate selection
-                    </div>
-                </div>
-            </div>
-
-            <div style="padding: 32px 0; border-top: 1px solid rgba(0,0,0,0.08);">
-                <p style="font-size: 15px; color: #6e6e73; line-height: 1.47; margin-bottom: 16px; letter-spacing: -0.016em;">
-                    Built on <a href="https://espressif.github.io/esptool-js/" target="_blank" style="color: #0071e3; text-decoration: none;">esptool-js</a> by Espressif Systems. Core flash operations use esptool-js directly.
-                </p>
-                <a href="https://github.com/adam-weber/esp-webflash-toolkit/tree/main/docs/flasher" target="_blank" style="display: inline-flex; align-items: center; color: #0071e3; text-decoration: none; font-size: 15px; font-weight: 500; letter-spacing: -0.016em;">
-                    View source code on GitHub
-                    <svg width="14" height="14" viewBox="0 0 14 14" style="margin-left: 6px; opacity: 0.7;">
-                        <path d="M11.5 1.5v9M11.5 1.5h-9M11.5 1.5L1.5 11.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-                    </svg>
-                </a>
-            </div>
-        </div>
-    </div>
-
     <!-- App-specific config -->
     <script src="js/projects-config.js"></script>
-
-    <!-- Core libraries (local) -->
     <script src="js/nvs-generator.js"></script>
 
     <script type="module">
-        // Import modules locally
+        // Import modules
         import { FlasherApp } from './js/main-app.js';
 
         // Get projects from global scope (loaded by projects-config.js)

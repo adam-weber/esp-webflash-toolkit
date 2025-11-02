@@ -1,6 +1,8 @@
 /**
  * Main Application for ESP32 Web Flasher
  * Coordinates UI, configuration, device connection, and firmware flashing
+ *
+ * @author Adam Weber (github: adam-weber)
  */
 
 import { FlasherUI } from './flasher-ui.js';
@@ -24,8 +26,9 @@ export class FlasherApp {
         this.btnWriteConfig = document.getElementById('btn-write-config');
         this.btnClearMonitor = document.getElementById('btn-clear-monitor');
 
-        // State - auto-select the only project (active-wing)
-        this.selectedProject = this.projects['active-wing'];
+        // State - auto-select the first project
+        const projectKeys = Object.keys(this.projects);
+        this.selectedProject = projectKeys.length > 0 ? this.projects[projectKeys[0]] : null;
 
         // Initialize
         this.init();
@@ -42,7 +45,7 @@ export class FlasherApp {
 
         // Check if project loaded
         if (!this.selectedProject) {
-            this.ui.log('ERROR: active-wing project not found. Available projects: ' + Object.keys(this.projects).join(', '), 'error');
+            this.ui.log('ERROR: No projects found. Available projects: ' + Object.keys(this.projects).join(', '), 'error');
             this.ui.updateStatus('error', 'Project not found', 'Configuration error - check console');
             return;
         }
@@ -50,7 +53,7 @@ export class FlasherApp {
         // Attach event listeners
         this.attachEventListeners();
 
-        // Auto-load the active-wing project UI
+        // Auto-load the project UI
         this.loadProjectUI();
 
         // Initialize UI elements
@@ -115,6 +118,9 @@ export class FlasherApp {
         console.log('Config sections:', this.selectedProject.configSections);
         console.log('Config container element:', configContainer);
 
+        // Update header with project name and links
+        this.updateHeader(this.selectedProject);
+
         // Show project details and render config
         this.ui.showProjectDetails(this.selectedProject);
         projectDetails.classList.add('active');
@@ -130,6 +136,27 @@ export class FlasherApp {
         this.ui.updateStatus('waiting', 'Configure Settings', 'Fill in configuration, then connect your device');
 
         this.ui.log('UI loaded. Connect button enabled.', 'success');
+    }
+
+    updateHeader(project) {
+        // Update title
+        const headerTitle = document.getElementById('app-header-title');
+        if (headerTitle && project.name) {
+            headerTitle.textContent = project.name;
+            document.title = project.name + ' - ESP32 Web Flasher';
+        }
+
+        // Update navbar
+        const headerNav = document.getElementById('app-header-nav');
+        if (headerNav) {
+            // Use navbarLinks if available, otherwise fall back to headerLinks for backwards compatibility
+            const navLinks = project.navbarLinks || project.headerLinks || [];
+            if (navLinks.length > 0) {
+                headerNav.innerHTML = navLinks.map(link =>
+                    `<a href="${link.url}" target="_blank" class="app-header-link">${link.label}</a>`
+                ).join('');
+            }
+        }
     }
 
     attachEventListeners() {

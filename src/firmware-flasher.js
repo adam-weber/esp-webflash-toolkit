@@ -1,6 +1,8 @@
 /**
  * Firmware Flasher for ESP32 Web Flasher
  * Handles firmware download, NVS generation, and flashing
+ *
+ * @author Adam Weber (github: adam-weber)
  */
 
 export class FirmwareFlasher {

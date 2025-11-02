@@ -1,6 +1,8 @@
 /**
  * UI Management for ESP32 Web Flasher
  * Handles status updates, progress, logging, and visual feedback
+ *
+ * @author Adam Weber (github: adam-weber)
  */
 
 export class FlasherUI {
@@ -163,6 +165,12 @@ export class FlasherUI {
                </a>`
             : '';
 
+        // Generate step 1 dynamically based on config sections
+        const configTitles = project.configSections.map(section => section.title).join(', ');
+        const step1Text = configTitles
+            ? `Configure ${configTitles} in the center panel`
+            : 'Review configuration in the center panel';
+
         document.getElementById('project-details').innerHTML = `
             <p style="margin-bottom: 24px;">${project.description}</p>
 
@@ -178,7 +186,7 @@ export class FlasherUI {
             <div class="section section-bg">
                 <h3>Steps</h3>
                 <ul class="instruction-list">
-                    <li data-step="1">Configure WiFi, MQTT, and TCP settings in the center panel</li>
+                    <li data-step="1">${step1Text}</li>
                     <li data-step="2">Connect your ESP32 device via USB</li>
                     <li data-step="3">Click "Connect Device" and select the serial port</li>
                     <li data-step="4">Click "Flash Firmware" to begin</li>
