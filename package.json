@@ -1,9 +1,16 @@
 {
   "name": "esp-webflash-toolkit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Browser-based ESP32 flashing toolkit - use as library or scaffold your own flasher",
-  "keywords": ["esp32", "esp8266", "firmware", "flasher", "web-serial", "nvs"],
+  "keywords": [
+    "esp32",
+    "esp8266",
+    "firmware",
+    "flasher",
+    "web-serial",
+    "nvs"
+  ],
   "author": "Adam Weber",
   "license": "MIT",
   "repository": {
