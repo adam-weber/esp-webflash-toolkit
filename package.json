@@ -24,7 +24,7 @@
     "./nvs-generator": "./dist/nvs-generator.js"
   },
   "bin": {
-    "esp-webflash": "./bin/cli.js"
+    "esp-webflash-toolkit": "./bin/cli.js"
   },
   "files": [
     "dist/",
@@ -41,9 +41,11 @@
     "docs:serve": "npx honkit serve docs",
     "docs:pdf": "npx honkit pdf docs esp-webflash-toolkit-docs.pdf"
   },
-  "devDependencies": {
-    "esbuild": "^0.24.0",
+  "dependencies": {
     "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
   },
   "engines": {
     "node": ">=18.0.0"
