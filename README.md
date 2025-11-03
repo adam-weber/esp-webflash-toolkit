@@ -1,10 +1,13 @@
 # ESP WebFlash Toolkit
 
-A browser-based toolkit built on [esptool-js](https://github.com/espressif/esptool-js) for flashing ESP32 devices with runtime-configurable firmware. Built around a [JavaScript implementation](./src/nvs-generator.js) of ESP-IDF's NVS partition format that lets you generate config binaries on the fly.
+[![npm version](https://img.shields.io/npm/v/esp-webflash-toolkit.svg)](https://www.npmjs.com/package/esp-webflash-toolkit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A pure JavaScript implementation of ESP-IDF's NVS (Non-Volatile Storage) partition format that runs in a browser. This lets you generate ESP32 config binaries on the fly in a browser, then flash them to devices via Web Serial API - no build chain required.
 
 ---
 
-Traditional firmware distribution requires end users to install platform-specific tooling and run command-line procedures. Every configuration change means recompiling and reflashing the entire binary. We've taken a different approach: **flash precompiled firmware once, then manage configurations through NVS partitions generated in the browser**.
+Traditional firmware distribution requires end users to install platform-specific tooling and run command-line procedures. Every configuration change means recompiling and reflashing the entire binary. This takes a different approach: **flash precompiled firmware, then manage configurations through NVS partitions generated in the browser**.
 
 This project implements the complete [ESP-IDF NVS binary format](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html) in JavaScript, producing partitions that are byte-for-byte compatible with ESP-IDF. Your firmware reads them using standard NVS APIs without modifications. Unlike solutions like Improv Wi-Fi, this works with existing ESP-IDF projects out of the box.
 
