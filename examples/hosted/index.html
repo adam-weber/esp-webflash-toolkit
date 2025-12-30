@@ -245,27 +245,121 @@
             font-size: 14px;
         }
 
+        .browser-warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .advanced-toggle {
+            margin-bottom: 20px;
+        }
+
+        .advanced-toggle summary {
+            cursor: pointer;
+            color: #86868b;
+            font-size: 14px;
+            padding: 8px 0;
+        }
+
+        .advanced-toggle summary:hover {
+            color: #1d1d1f;
+        }
+
+        .advanced-fields {
+            padding-top: 12px;
+        }
+
+        #url-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        #url-buttons .btn {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .field-toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .field-toggles .toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: #f5f5f7;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .field-toggles .toggle:hover {
+            background: #e8e8ed;
+        }
+
+        .field-toggles .toggle input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+        }
+
+        .field-toggles .toggle input:checked + span,
+        .field-toggles .toggle:has(input:checked) {
+            background: #e3f0ff;
+        }
+
+        .repo-section {
+            margin-bottom: 16px;
+        }
+
+        .repo-section label {
+            display: block;
+            font-size: 15px;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+        }
+
         .repo-input-group {
             display: flex;
-            gap: 12px;
-            align-items: stretch;
+            gap: 8px;
         }
 
         .repo-input-group input {
-            flex: 1;
+            flex: 1 1 auto;
             min-width: 0;
+            width: 0;
+            padding: 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 15px;
+            box-sizing: border-box;
         }
 
         .repo-input-group .btn {
-            flex-shrink: 0;
-            padding: 12px 24px;
-            white-space: nowrap;
+            flex: 0 0 auto;
+            width: auto;
+            padding: 12px 16px;
             margin-bottom: 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <div id="browser-warning" class="browser-warning">
+            Web Serial requires Chrome, Edge, or Opera. Safari and Firefox are not supported.
+        </div>
+
         <!-- Setup Mode (shown when no params) -->
         <div id="setup-view" class="setup-card" style="display: none;">
             <h1>ESP Web Flasher</h1>
@@ -288,18 +382,50 @@
                     <option value="esp32s2">ESP32-S2</option>
                     <option value="esp32s3">ESP32-S3</option>
                     <option value="esp32c3">ESP32-C3</option>
+                    <option value="esp32c6">ESP32-C6</option>
+                    <option value="esp32h2">ESP32-H2</option>
                     <option value="esp8266">ESP8266</option>
+                    <option value="custom">Other (specify below)</option>
                 </select>
+                <input type="text" id="setup-chip-custom" placeholder="e.g. esp32c2" style="display: none; margin-top: 8px;">
             </div>
+
+            <div class="form-group">
+                <label>Configuration Fields</label>
+                <div class="field-toggles">
+                    <label class="toggle"><input type="checkbox" id="field-wifi" checked> WiFi</label>
+                    <label class="toggle"><input type="checkbox" id="field-mqtt"> MQTT</label>
+                    <label class="toggle"><input type="checkbox" id="field-device_name"> Device Name</label>
+                    <label class="toggle"><input type="checkbox" id="field-api_key"> API Key</label>
+                    <label class="toggle"><input type="checkbox" id="field-server_url"> Server URL</label>
+                </div>
+            </div>
+
+            <details class="advanced-toggle">
+                <summary>Advanced Options</summary>
+                <div class="advanced-fields">
+                    <div class="form-group">
+                        <label>Firmware Offset</label>
+                        <input type="text" id="setup-offset" placeholder="0x10000 (default)">
+                    </div>
+                    <div class="form-group">
+                        <label>NVS Offset</label>
+                        <input type="text" id="setup-nvs" placeholder="0x9000 (default)">
+                    </div>
+                </div>
+            </details>
 
             <button class="btn btn-primary" id="generate-url-btn">Generate Flash Link</button>
 
             <div id="generated-url" class="generated-url"></div>
-            <button class="btn btn-secondary copy-btn" id="copy-url-btn" style="display: none;">Copy Link</button>
+            <div id="url-buttons" style="display: none;">
+                <button class="btn btn-secondary" id="copy-url-btn">Copy Link</button>
+                <button class="btn btn-secondary" id="test-url-btn">Test Link</button>
+            </div>
 
             <div class="or-divider">— or load from repo —</div>
 
-            <div class="form-group">
+            <div class="repo-section">
                 <label>GitHub Repo with flash-config.json</label>
                 <div class="repo-input-group">
                     <input type="text" id="setup-repo" placeholder="username/repo">
@@ -340,6 +466,11 @@
     </div>
 
     <script type="module">
+        // Browser check
+        if (!navigator.serial) {
+            document.getElementById('browser-warning').style.display = 'block';
+        }
+
         // Parse URL params
         const params = new URLSearchParams(window.location.search);
         const config = {
@@ -439,26 +570,59 @@
             setupView.style.display = 'block';
             flashView.style.display = 'none';
 
+            // Show/hide custom chip input
+            const chipSelect = document.getElementById('setup-chip');
+            const chipCustom = document.getElementById('setup-chip-custom');
+            chipSelect.onchange = () => {
+                chipCustom.style.display = chipSelect.value === 'custom' ? 'block' : 'none';
+            };
+
             // Generate URL button
             document.getElementById('generate-url-btn').onclick = () => {
                 const name = document.getElementById('setup-name').value.trim();
                 const bin = document.getElementById('setup-bin').value.trim();
-                const chip = document.getElementById('setup-chip').value;
+                let chip = document.getElementById('setup-chip').value;
+                if (chip === 'custom') {
+                    chip = document.getElementById('setup-chip-custom').value.trim().toLowerCase();
+                    if (!chip) {
+                        alert('Please enter a chip type');
+                        return;
+                    }
+                }
 
                 if (!name || !bin) {
                     alert('Please fill in project name and firmware URL');
                     return;
                 }
 
+                // Collect selected fields
+                const fieldIds = ['wifi', 'mqtt', 'device_name', 'api_key', 'server_url'];
+                const selectedFields = fieldIds.filter(id =>
+                    document.getElementById(`field-${id}`).checked
+                );
+
                 const url = new URL(window.location.href.split('?')[0]);
                 url.searchParams.set('name', name);
                 url.searchParams.set('bin', bin);
                 url.searchParams.set('chip', chip);
+                if (selectedFields.length > 0) {
+                    url.searchParams.set('fields', selectedFields.join(','));
+                }
+
+                // Advanced options (only include if non-default)
+                const offset = document.getElementById('setup-offset').value.trim();
+                const nvs = document.getElementById('setup-nvs').value.trim();
+                if (offset && offset !== '0x10000') {
+                    url.searchParams.set('offset', offset);
+                }
+                if (nvs && nvs !== '0x9000') {
+                    url.searchParams.set('nvs', nvs);
+                }
 
                 const urlStr = url.toString();
                 document.getElementById('generated-url').textContent = urlStr;
                 document.getElementById('generated-url').classList.add('visible');
-                document.getElementById('copy-url-btn').style.display = 'block';
+                document.getElementById('url-buttons').style.display = 'flex';
             };
 
             // Copy URL button
@@ -469,6 +633,12 @@
                 setTimeout(() => {
                     document.getElementById('copy-url-btn').textContent = 'Copy Link';
                 }, 2000);
+            };
+
+            // Test URL button
+            document.getElementById('test-url-btn').onclick = () => {
+                const url = document.getElementById('generated-url').textContent;
+                window.open(url, '_blank');
             };
 
             // Load from repo button
@@ -517,13 +687,22 @@
             // Predefined field templates
             const templates = {
                 wifi: [
-                    { key: 'wifi_ssid', label: 'WiFi SSID', type: 'text' },
+                    { key: 'wifi_ssid', label: 'WiFi SSID', type: 'text', placeholder: 'MyNetwork' },
                     { key: 'wifi_pass', label: 'WiFi Password', type: 'password' }
                 ],
                 mqtt: [
-                    { key: 'mqtt_host', label: 'MQTT Host', type: 'text' },
+                    { key: 'mqtt_host', label: 'MQTT Host', type: 'text', placeholder: 'mqtt.example.com' },
                     { key: 'mqtt_user', label: 'MQTT Username', type: 'text' },
                     { key: 'mqtt_pass', label: 'MQTT Password', type: 'password' }
+                ],
+                device_name: [
+                    { key: 'device_name', label: 'Device Name', type: 'text', placeholder: 'my-device-001' }
+                ],
+                api_key: [
+                    { key: 'api_key', label: 'API Key', type: 'password' }
+                ],
+                server_url: [
+                    { key: 'server_url', label: 'Server URL', type: 'text', placeholder: 'https://api.example.com' }
                 ]
             };
 
