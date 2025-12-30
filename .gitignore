@@ -3,8 +3,7 @@ node_modules/
 yarn.lock
 pnpm-lock.yaml
 
-# Build output
-dist/
+# Build output (dist/ is committed for CDN/direct use)
 
 # GitBook build artifacts
 .gitbook/
