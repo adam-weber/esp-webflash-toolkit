@@ -309,58 +309,124 @@
                                 <section class="normal markdown-section">
                                 
                                 <h1 id="quickstart">Quickstart</h1>
-<p>Generate and flash an ESP32 config partition in under 30 seconds.</p>
+<p>End-to-end example: generate config in browser, flash to device, read in firmware.</p>
 <h2 id="installation">Installation</h2>
 <h3 id="browser-cdn">Browser (CDN)</h3>
 <pre><code class="lang-html"><span class="hljs-tag">&lt;<span class="hljs-name">script</span> <span class="hljs-attr">src</span>=<span class="hljs-string">"https://cdn.jsdelivr.net/gh/adam-weber/esp-webflash-toolkit@main/dist/nvs-generator.js"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">script</span>&gt;</span>
 </code></pre>
-<h3 id="nodejs-npm">Node.js (npm)</h3>
-<pre><code class="lang-bash">npm install @esp-web-tools/nvs-generator
-<span class="hljs-comment"># or</span>
-git <span class="hljs-built_in">clone</span> https://github.com/adam-weber/esp-webflash-toolkit.git
+<h3 id="npm">npm</h3>
+<pre><code class="lang-bash">npm install esp-webflash-toolkit
 </code></pre>
 <h2 id="end-to-end-example">End-to-End Example</h2>
-<p>Generate WiFi config and flash to ESP32—just 10 lines:</p>
-<pre><code class="lang-javascript"><span class="hljs-comment">// 1. Generate the partition</span>
+<h3 id="1-generate-and-flash-browserjavascript">1. Generate and Flash (Browser/JavaScript)</h3>
+<pre><code class="lang-javascript"><span class="hljs-keyword">import</span> { <span class="hljs-title class_">NVSGenerator</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">'esp-webflash-toolkit/nvs-generator'</span>;
+
+<span class="hljs-comment">// Generate the NVS partition</span>
 <span class="hljs-keyword">const</span> generator = <span class="hljs-keyword">new</span> <span class="hljs-title class_">NVSGenerator</span>();
 <span class="hljs-keyword">const</span> nvsBinary = generator.<span class="hljs-title function_">generate</span>({
-    <span class="hljs-attr">wifi</span>: { <span class="hljs-attr">ssid</span>: <span class="hljs-string">"MyNetwork"</span>, <span class="hljs-attr">password</span>: <span class="hljs-string">"SecurePass123"</span> }
-}, <span class="hljs-number">0x6000</span>);
+    <span class="hljs-attr">config</span>: {
+        <span class="hljs-attr">wifi_ssid</span>: <span class="hljs-string">"MyNetwork"</span>,
+        <span class="hljs-attr">wifi_pass</span>: <span class="hljs-string">"SecurePass123"</span>,
+        <span class="hljs-attr">api_url</span>: <span class="hljs-string">"https://api.example.com"</span>,
+        <span class="hljs-attr">device_id</span>: <span class="hljs-number">42</span>
+    }
+}, <span class="hljs-number">0x6000</span>);  <span class="hljs-comment">// 24KB partition</span>
 
-<span class="hljs-comment">// 2. Flash it to device</span>
+<span class="hljs-comment">// Flash to device via Web Serial</span>
 <span class="hljs-keyword">const</span> port = <span class="hljs-keyword">await</span> navigator.<span class="hljs-property">serial</span>.<span class="hljs-title function_">requestPort</span>();
-<span class="hljs-keyword">const</span> esploader = <span class="hljs-keyword">await</span> <span class="hljs-title function_">connectToESP32</span>(port);
+<span class="hljs-keyword">await</span> port.<span class="hljs-title function_">open</span>({ <span class="hljs-attr">baudRate</span>: <span class="hljs-number">115200</span> });
+
+<span class="hljs-keyword">const</span> esploader = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ESPLoader</span>(port, { <span class="hljs-attr">debugLogging</span>: <span class="hljs-literal">false</span> });
+<span class="hljs-keyword">await</span> esploader.<span class="hljs-title function_">connect</span>();
 
 <span class="hljs-keyword">await</span> esploader.<span class="hljs-title function_">writeFlash</span>({
     <span class="hljs-attr">fileArray</span>: [{ <span class="hljs-attr">data</span>: <span class="hljs-title function_">toFlashString</span>(nvsBinary), <span class="hljs-attr">address</span>: <span class="hljs-number">0x9000</span> }],
     <span class="hljs-attr">flashSize</span>: <span class="hljs-string">'keep'</span>
 });
 
-<span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">'✅ Flashed! Device reboots with WiFi credentials.'</span>);
-</code></pre>
-<h3 id="helper-functions">Helper Functions</h3>
-<p>Copy these to your project:</p>
-<pre><code class="lang-javascript"><span class="hljs-comment">// Connect to ESP32 via Web Serial</span>
-<span class="hljs-keyword">async</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">connectToESP32</span>(<span class="hljs-params">port</span>) {
-    <span class="hljs-keyword">await</span> port.<span class="hljs-title function_">open</span>({ <span class="hljs-attr">baudRate</span>: <span class="hljs-number">115200</span> });
-    <span class="hljs-keyword">const</span> esploader = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ESPLoader</span>(port, { <span class="hljs-attr">debugLogging</span>: <span class="hljs-literal">false</span> });
-    <span class="hljs-keyword">await</span> esploader.<span class="hljs-title function_">connect</span>();
-    <span class="hljs-keyword">return</span> esploader;
-}
-
-<span class="hljs-comment">// Convert Uint8Array to string format for esptool-js</span>
+<span class="hljs-comment">// Helper: convert Uint8Array to string for esptool-js</span>
 <span class="hljs-keyword">function</span> <span class="hljs-title function_">toFlashString</span>(<span class="hljs-params">bytes</span>) {
     <span class="hljs-keyword">return</span> <span class="hljs-title class_">String</span>.<span class="hljs-title function_">fromCharCode</span>(...bytes);
 }
 </code></pre>
-<h2 id="what-you-just-did">What You Just Did</h2>
-<p>Generated a 24KB NVS partition client-side and flashed it to ESP32 at <code>0x9000</code>. The device will now connect to WiFi on boot. No Python, no esptool.py, no command line.</p>
+<h3 id="2-read-config-in-firmware">2. Read Config in Firmware</h3>
+<p>The NVS partition is standard ESP-IDF format. Read it with native APIs:</p>
+<p><strong>ESP-IDF (C)</strong></p>
+<pre><code class="lang-c"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">"nvs_flash.h"</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">"nvs.h"</span></span>
+
+<span class="hljs-type">void</span> <span class="hljs-title function_">read_config</span><span class="hljs-params">()</span> {
+    nvs_flash_init();
+
+    <span class="hljs-type">nvs_handle_t</span> handle;
+    nvs_open(<span class="hljs-string">"config"</span>, NVS_READONLY, &amp;handle);
+
+    <span class="hljs-type">char</span> ssid[<span class="hljs-number">32</span>], password[<span class="hljs-number">64</span>], api_url[<span class="hljs-number">128</span>];
+    <span class="hljs-type">size_t</span> len;
+
+    len = <span class="hljs-keyword">sizeof</span>(ssid);
+    nvs_get_str(handle, <span class="hljs-string">"wifi_ssid"</span>, ssid, &amp;len);
+
+    len = <span class="hljs-keyword">sizeof</span>(password);
+    nvs_get_str(handle, <span class="hljs-string">"wifi_pass"</span>, password, &amp;len);
+
+    len = <span class="hljs-keyword">sizeof</span>(api_url);
+    nvs_get_str(handle, <span class="hljs-string">"api_url"</span>, api_url, &amp;len);
+
+    <span class="hljs-type">uint32_t</span> device_id;
+    nvs_get_u32(handle, <span class="hljs-string">"device_id"</span>, &amp;device_id);
+
+    nvs_close(handle);
+
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">"WiFi: %s, Device: %lu\n"</span>, ssid, device_id);
+}
+</code></pre>
+<p><strong>Arduino</strong></p>
+<pre><code class="lang-cpp"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;Preferences.h&gt;</span></span>
+
+Preferences prefs;
+
+<span class="hljs-function"><span class="hljs-type">void</span> <span class="hljs-title">setup</span><span class="hljs-params">()</span> </span>{
+    prefs.<span class="hljs-built_in">begin</span>(<span class="hljs-string">"config"</span>, <span class="hljs-literal">true</span>);  <span class="hljs-comment">// true = read-only</span>
+
+    String ssid = prefs.<span class="hljs-built_in">getString</span>(<span class="hljs-string">"wifi_ssid"</span>, <span class="hljs-string">""</span>);
+    String pass = prefs.<span class="hljs-built_in">getString</span>(<span class="hljs-string">"wifi_pass"</span>, <span class="hljs-string">""</span>);
+    String api = prefs.<span class="hljs-built_in">getString</span>(<span class="hljs-string">"api_url"</span>, <span class="hljs-string">""</span>);
+    <span class="hljs-type">uint32_t</span> id = prefs.<span class="hljs-built_in">getUInt</span>(<span class="hljs-string">"device_id"</span>, <span class="hljs-number">0</span>);
+
+    prefs.<span class="hljs-built_in">end</span>();
+}
+</code></pre>
+<p><strong>Rust (esp-idf-svc)</strong></p>
+<pre><code class="lang-rust"><span class="hljs-keyword">use</span> esp_idf_svc::nvs::*;
+
+<span class="hljs-keyword">fn</span> <span class="hljs-title function_">read_config</span>() <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;(), EspError&gt; {
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">nvs</span> = EspDefaultNvsPartition::<span class="hljs-title function_ invoke__">take</span>()?;
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">ns</span> = EspNvs::<span class="hljs-title function_ invoke__">new</span>(nvs, <span class="hljs-string">"config"</span>, <span class="hljs-literal">true</span>)?;
+
+    <span class="hljs-keyword">let</span> <span class="hljs-keyword">mut </span><span class="hljs-variable">buf</span> = [<span class="hljs-number">0u8</span>; <span class="hljs-number">128</span>];
+
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">ssid</span> = ns.<span class="hljs-title function_ invoke__">get_str</span>(<span class="hljs-string">"wifi_ssid"</span>, &amp;<span class="hljs-keyword">mut</span> buf)?;
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">pass</span> = ns.<span class="hljs-title function_ invoke__">get_str</span>(<span class="hljs-string">"wifi_pass"</span>, &amp;<span class="hljs-keyword">mut</span> buf)?;
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">api_url</span> = ns.<span class="hljs-title function_ invoke__">get_str</span>(<span class="hljs-string">"api_url"</span>, &amp;<span class="hljs-keyword">mut</span> buf)?;
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">device_id</span>: <span class="hljs-type">u32</span> = ns.<span class="hljs-title function_ invoke__">get_u32</span>(<span class="hljs-string">"device_id"</span>)?.<span class="hljs-title function_ invoke__">unwrap_or</span>(<span class="hljs-number">0</span>);
+
+    <span class="hljs-title function_ invoke__">Ok</span>(())
+}
+</code></pre>
+<h2 id="key-concepts">Key Concepts</h2>
+<ul>
+<li><strong>Namespace</strong>: The first-level key in your config object (<code>config</code> above) becomes the NVS namespace</li>
+<li><strong>Keys</strong>: Limited to 15 characters, alphanumeric + underscore, case-sensitive</li>
+<li><strong>Partition offset</strong>: Default is <code>0x9000</code> (matches most ESP-IDF partition tables)</li>
+<li><strong>Partition size</strong>: <code>0x6000</code> (24KB) is typical, must match your partition table</li>
+</ul>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="examples.html">View more code examples</a></li>
-<li><a href="firmware-router.html">Learn about the firmware router</a></li>
-<li><a href="javascript-api.html">Explore the JavaScript API</a></li>
-<li><a href="web-flasher-scaffold.html">Use the web flasher scaffold</a></li>
+<li><a href="web-flasher-scaffold.html">Scaffold a complete web flasher</a></li>
+<li><a href="partition-table-generator.html">Partition Table Generator</a> - create custom layouts</li>
+<li><a href="javascript-api.html">JavaScript API reference</a></li>
 </ul>
 
                                 
@@ -405,7 +471,7 @@ git <span class="hljs-built_in">clone</span> https://github.com/adam-weber/esp-w
     <script>
         var gitbook = gitbook || [];
         gitbook.push(function() {
-            gitbook.page.hasChanged({"page":{"title":"Quickstart","level":"2.1","depth":1,"next":{"title":"Code Examples","level":"2.2","depth":1,"path":"examples.md","ref":"examples.md","articles":[]},"previous":{"title":"Introduction","level":"1.1","depth":1,"path":"README.md","ref":"README.md","articles":[]},"dir":"ltr"},"config":{"plugins":["theme-default"],"root":".","styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"pluginsConfig":{"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":true},"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"fontsettings":{"theme":"white","family":"sans","size":2}},"theme":"default","author":"Adam Weber","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{"version":"0.1.0"},"title":"ESP WebFlash Toolkit Documentation","language":"en","links":{"sidebar":{"GitHub Repository":"https://github.com/adam-weber/esp-webflash-toolkit"}},"gitbook":"*","description":"Browser-based ESP32 flashing toolkit - use as library or scaffold your own flasher"},"file":{"path":"quickstart.md","mtime":"2025-11-02T21:33:27.000Z","type":"markdown"},"gitbook":{"version":"6.1.4","time":"2025-12-30T05:32:29.075Z"},"basePath":".","book":{"language":""}});
+            gitbook.page.hasChanged({"page":{"title":"Quickstart","level":"2.1","depth":1,"next":{"title":"Code Examples","level":"2.2","depth":1,"path":"examples.md","ref":"examples.md","articles":[]},"previous":{"title":"Introduction","level":"1.1","depth":1,"path":"README.md","ref":"README.md","articles":[]},"dir":"ltr"},"config":{"plugins":["theme-default"],"root":".","styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"pluginsConfig":{"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":true},"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"fontsettings":{"theme":"white","family":"sans","size":2}},"theme":"default","author":"Adam Weber","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{"version":"0.1.0"},"title":"ESP WebFlash Toolkit Documentation","language":"en","links":{"sidebar":{"GitHub Repository":"https://github.com/adam-weber/esp-webflash-toolkit"}},"gitbook":"*","description":"Browser-based ESP32 flashing toolkit - use as library or scaffold your own flasher"},"file":{"path":"quickstart.md","mtime":"2025-12-30T05:46:18.887Z","type":"markdown"},"gitbook":{"version":"6.1.4","time":"2025-12-30T05:46:26.395Z"},"basePath":".","book":{"language":""}});
         });
     </script>
 </div>
