@@ -49,43 +49,18 @@ async function scaffoldFlasher(targetDir) {
     console.log(`\nScaffolding ESP WebFlash toolkit in ${targetDir}...\n`);
     await fs.copy(TEMPLATE_DIR, targetDir);
 
-    // Create package.json for the scaffolded project
+    // Create package.json for the scaffolded project (minimal, no build tools needed)
     const packageJson = {
       name: path.basename(targetDir),
       version: "1.0.0",
       description: "ESP32 Web Flasher",
       type: "module",
       scripts: {
-        "build:css": "npx tailwindcss -i input.css -o styles.css --minify",
-        "serve": "npm run build:css && npx serve . -l 3000",
-        "dev": "npx tailwindcss -i input.css -o styles.css --watch"
-      },
-      devDependencies: {
-        "tailwindcss": "^3.4.0"
+        "serve": "npx serve . -l 3000"
       }
     };
 
     await fs.writeJSON(path.join(targetDir, 'package.json'), packageJson, { spaces: 2 });
-
-    // Build Tailwind CSS
-    console.log('Installing dependencies and building CSS...');
-    const { execSync } = await import('child_process');
-    try {
-      // Install Tailwind CSS
-      execSync('npm install', {
-        cwd: targetDir,
-        stdio: 'pipe'
-      });
-
-      // Build CSS
-      execSync('npm run build:css', {
-        cwd: targetDir,
-        stdio: 'pipe'
-      });
-      console.log('✓ Dependencies installed and CSS built successfully\n');
-    } catch (error) {
-      console.log('⚠ Could not build CSS automatically. Run "npm install && npm run build:css" manually.\n');
-    }
 
     // Create README for the scaffolded project
     const readme = `# ${path.basename(targetDir)}
@@ -94,22 +69,14 @@ ESP32 Web Flasher - scaffolded from esp-webflash-toolkit
 
 ## Local Development
 
-1. Build CSS and start server:
+1. Start local server:
    \`\`\`bash
-   npm run serve
+   npx serve . -l 3000
    \`\`\`
 
 2. Open http://localhost:3000 in Chrome/Edge/Opera (Web Serial API required)
 
 3. Connect your ESP32 device and flash firmware
-
-### Development with Hot Reload
-
-\`\`\`bash
-npm run dev
-\`\`\`
-
-This watches for CSS changes and rebuilds automatically.
 
 ## Deploy to GitHub Pages
 
@@ -121,27 +88,22 @@ This watches for CSS changes and rebuilds automatically.
 
 ### Automatic Deployment
 
-The included workflow (\`.github/workflows/deploy.yml\`) automatically:
-- Builds production-optimized Tailwind CSS
-- Deploys to GitHub Pages on every push to main
+The included workflow (\`.github/workflows/deploy.yml\`) automatically deploys to GitHub Pages on every push to main.
 
 Your flasher will be live at: \`https://[username].github.io/[repo-name]/\`
 
 ## Customization
 
 - **Configuration**: Edit \`js/projects-config.js\` to add your projects and firmware URLs
-- **Styling**: Modify \`input.css\` for custom Tailwind styles
+- **Styling**: Modify \`styles.css\` for custom styles
 - **Layout**: Edit \`index.html\` for UI changes
-- **Build Process**: Adjust \`tailwind.config.js\` for Tailwind configuration
 
 ## Project Structure
 
 \`\`\`
 .
 ├── index.html              # Main application
-├── input.css               # Tailwind source
-├── styles.css              # Built CSS (generated)
-├── tailwind.config.js      # Tailwind configuration
+├── styles.css              # Stylesheet
 ├── js/                     # Application modules
 │   ├── main-app.js
 │   ├── config-manager.js
@@ -173,7 +135,7 @@ https://github.com/adam-weber/esp-webflash-toolkit
     console.log('Done! Your ESP Web Flasher is ready.\n');
     console.log('Next steps:');
     console.log(`  cd ${targetDir}`);
-    console.log('  npm run serve');
+    console.log('  npx serve . -l 3000');
     console.log('\nThen open http://localhost:3000 in your browser.');
     console.log('\nFor GitHub Pages deployment, see README.md\n');
 
@@ -190,9 +152,9 @@ function showHelp() {
 ESP WebFlash Toolkit - Browser-based ESP32 flashing
 
 Usage:
-  npx esp-webflash create <project-name>    Create new flasher project
-  npx esp-webflash init                     Initialize in current directory
-  npx esp-webflash --help                   Show this help
+  npx esp-webflash-toolkit create <project-name>    Create new flasher project
+  npx esp-webflash-toolkit init                     Initialize in current directory
+  npx esp-webflash-toolkit --help                   Show this help
 
 Library Usage:
   npm install esp-webflash-toolkit
@@ -201,8 +163,8 @@ Library Usage:
   import { FirmwareFlasher } from 'esp-webflash-toolkit/firmware-flasher';
 
 Examples:
-  npx esp-webflash create my-device-flasher
-  npx esp-webflash init
+  npx esp-webflash-toolkit create my-device-flasher
+  npx esp-webflash-toolkit init
 `);
 }
 
@@ -219,7 +181,7 @@ async function main() {
     const projectName = args[1];
     if (!projectName) {
       console.error('Error: Please specify a project name');
-      console.error('Usage: npx esp-webflash create <project-name>');
+      console.error('Usage: npx esp-webflash-toolkit create <project-name>');
       process.exit(1);
     }
     const targetDir = path.join(process.cwd(), projectName);

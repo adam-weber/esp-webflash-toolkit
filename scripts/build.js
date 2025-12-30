@@ -65,7 +65,7 @@ async function main() {
     }
   }
 
-  // Copy built files to templates for scaffolding
+  // Copy built files to templates for scaffolding (JS only, no source maps)
   console.log('\nCopying to templates/flasher/js/...');
   await fs.ensureDir(templateJsDir);
 
@@ -75,14 +75,7 @@ async function main() {
     await fs.copy(srcPath, destPath);
     console.log(`  ${file}`);
   }
-
-  // Copy source maps too
-  const mapFiles = await fs.readdir(distDir);
-  for (const file of mapFiles.filter(f => f.endsWith('.map'))) {
-    const srcPath = path.join(distDir, file);
-    const destPath = path.join(templateJsDir, file);
-    await fs.copy(srcPath, destPath);
-  }
+  // Note: Source maps are not copied to templates to reduce package size
 
   console.log('\nBuild complete!\n');
   console.log(`Built files: dist/`);

@@ -114,9 +114,6 @@ export class FlasherApp {
         const configContainer = document.getElementById('config-container');
 
         this.ui.log('Loading project: ' + this.selectedProject.name, 'info');
-        console.log('Selected project:', this.selectedProject);
-        console.log('Config sections:', this.selectedProject.configSections);
-        console.log('Config container element:', configContainer);
 
         // Update header with project name and links
         this.updateHeader(this.selectedProject);
@@ -125,10 +122,7 @@ export class FlasherApp {
         this.ui.showProjectDetails(this.selectedProject);
         projectDetails.classList.add('active');
 
-        this.ui.log('Rendering config fields...', 'info');
         this.configManager.renderConfigFields(this.selectedProject);
-
-        console.log('Config container after render:', configContainer.innerHTML.substring(0, 200));
 
         this.btnConnect.disabled = false;
         this.btnConnect.textContent = 'Connect Device';

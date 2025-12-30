@@ -124,7 +124,6 @@ class NVSGenerator {
             data = new Uint8Array(strBytes.length + 1); // +1 for null terminator
             data.set(strBytes);
             data[strBytes.length] = 0; // Null terminator
-            console.log(`[NVS Writer] Key: ${key}, value: "${value}", data.length: ${data.length}, bytes:`, Array.from(data));
         } else if (typeof value === 'number') {
             if (Number.isInteger(value)) {
                 if (value >= 0 && value <= 255) {
@@ -390,7 +389,6 @@ NVSGenerator.prototype.parse = function(binary) {
                 // Find null terminator and decode only up to that point
                 const nullIndex = totalBytes.indexOf(0);
                 const actualLen = nullIndex >= 0 ? nullIndex : strLen;
-                console.log(`[NVS Parser] Key: ${key}, strLen: ${strLen}, span: ${span}, bytes:`, Array.from(totalBytes.slice(0, actualLen + 1)));
                 value = new TextDecoder().decode(totalBytes.slice(0, actualLen));
             } else if (type === this.TYPE_BLOB) {
                 // Blob: similar to string but return as Uint8Array
