@@ -247,16 +247,20 @@
 
         .repo-input-group {
             display: flex;
-            gap: 8px;
+            gap: 12px;
+            align-items: stretch;
         }
 
         .repo-input-group input {
             flex: 1;
+            min-width: 0;
         }
 
-        .repo-input-group button {
-            padding: 12px 20px;
+        .repo-input-group .btn {
+            flex-shrink: 0;
+            padding: 12px 24px;
             white-space: nowrap;
+            margin-bottom: 0;
         }
     </style>
 </head>
