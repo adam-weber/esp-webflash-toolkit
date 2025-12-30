@@ -26,145 +26,293 @@ function question(query) {
   return new Promise(resolve => rl.question(query, resolve));
 }
 
-async function scaffoldFlasher(targetDir) {
-  try {
-    // Check if template exists
-    if (!fs.existsSync(TEMPLATE_DIR)) {
-      console.error('Error: Template directory not found.');
-      console.error('This may be a development environment. Run `npm run build` first.');
-      process.exit(1);
+function select(query, options) {
+  return new Promise(resolve => {
+    console.log(`\n${query}`);
+    options.forEach((opt, i) => console.log(`  ${i + 1}) ${opt}`));
+    rl.question('> ', answer => {
+      const idx = parseInt(answer) - 1;
+      resolve(options[idx] || options[0]);
+    });
+  });
+}
+
+async function interactiveSetup() {
+  console.log('\n🔧 ESP WebFlash Toolkit - Project Setup\n');
+
+  const projectName = await question('Project name: ');
+  if (!projectName.trim()) {
+    console.error('Project name is required');
+    process.exit(1);
+  }
+
+  const dirName = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const targetDir = path.join(process.cwd(), dirName);
+
+  const chip = await select('Chip type:', [
+    'ESP32',
+    'ESP32-S2',
+    'ESP32-S3',
+    'ESP32-C3',
+    'ESP8266'
+  ]);
+
+  const firmwareUrl = await question('Firmware URL (or press Enter to set later): ');
+
+  const addWifi = (await question('Add WiFi configuration fields? (Y/n): ')).toLowerCase() !== 'n';
+
+  const addCustomFields = (await question('Add custom configuration fields? (y/N): ')).toLowerCase() === 'y';
+
+  let customFields = [];
+  if (addCustomFields) {
+    console.log('\nEnter custom fields (empty name to finish):');
+    while (true) {
+      const fieldName = await question('  Field name (e.g., device_name): ');
+      if (!fieldName.trim()) break;
+
+      const fieldLabel = await question('  Display label: ') || fieldName;
+      const fieldType = await select('  Field type:', ['text', 'password', 'number']);
+
+      customFields.push({
+        key: fieldName.trim(),
+        label: fieldLabel.trim(),
+        type: fieldType
+      });
     }
+  }
 
-    // Check if target directory exists
-    if (fs.existsSync(targetDir)) {
-      const answer = await question(`Directory "${targetDir}" already exists. Overwrite? (y/N): `);
-      if (answer.toLowerCase() !== 'y') {
-        console.log('Cancelled.');
-        process.exit(0);
-      }
-      await fs.remove(targetDir);
+  // Scaffold the project
+  console.log(`\nCreating project in ${targetDir}...`);
+  await scaffoldProject(targetDir, {
+    projectName: projectName.trim(),
+    chip: chip.toLowerCase().replace('-', ''),
+    firmwareUrl: firmwareUrl.trim(),
+    addWifi,
+    customFields
+  });
+
+  console.log('\n✅ Done! Your ESP Web Flasher is ready.\n');
+  console.log('Next steps:');
+  console.log(`  cd ${dirName}`);
+  console.log('  npx serve . -l 3000');
+  console.log('\nThen open http://localhost:3000 in your browser.');
+  if (!firmwareUrl.trim()) {
+    console.log('\n⚠️  Don\'t forget to set your firmware URL in js/projects-config.js');
+  }
+  console.log('');
+}
+
+async function scaffoldProject(targetDir, options) {
+  // Check if target exists
+  if (fs.existsSync(targetDir)) {
+    const answer = await question(`Directory "${path.basename(targetDir)}" exists. Overwrite? (y/N): `);
+    if (answer.toLowerCase() !== 'y') {
+      console.log('Cancelled.');
+      process.exit(0);
     }
+    await fs.remove(targetDir);
+  }
 
-    // Copy template
-    console.log(`\nScaffolding ESP WebFlash toolkit in ${targetDir}...\n`);
-    await fs.copy(TEMPLATE_DIR, targetDir);
+  // Check template exists
+  if (!fs.existsSync(TEMPLATE_DIR)) {
+    console.error('Error: Template directory not found.');
+    console.error('Run `npm run build` first if in development mode.');
+    process.exit(1);
+  }
 
-    // Create package.json for the scaffolded project (minimal, no build tools needed)
-    const packageJson = {
-      name: path.basename(targetDir),
-      version: "1.0.0",
-      description: "ESP32 Web Flasher",
-      type: "module",
-      scripts: {
-        "serve": "npx serve . -l 3000"
-      }
-    };
+  // Copy template
+  await fs.copy(TEMPLATE_DIR, targetDir);
 
-    await fs.writeJSON(path.join(targetDir, 'package.json'), packageJson, { spaces: 2 });
+  // Generate projects-config.js
+  const configSections = [];
 
-    // Create README for the scaffolded project
-    const readme = `# ${path.basename(targetDir)}
+  if (options.addWifi) {
+    configSections.push(`            {
+                name: 'WiFi',
+                fields: [
+                    { key: 'wifi_ssid', label: 'WiFi Network', type: 'text', required: true },
+                    { key: 'wifi_pass', label: 'WiFi Password', type: 'password', required: true }
+                ]
+            }`);
+  }
 
-ESP32 Web Flasher - scaffolded from esp-webflash-toolkit
+  if (options.customFields.length > 0) {
+    const customFieldsStr = options.customFields.map(f =>
+      `                    { key: '${f.key}', label: '${f.label}', type: '${f.type}' }`
+    ).join(',\n');
 
-## Local Development
+    configSections.push(`            {
+                name: 'Settings',
+                fields: [
+${customFieldsStr}
+                ]
+            }`);
+  }
 
-1. Start local server:
-   \`\`\`bash
-   npx serve . -l 3000
-   \`\`\`
+  const configContent = `/**
+ * Projects Configuration
+ * Edit this file to configure your ESP flasher
+ */
 
-2. Open http://localhost:3000 in Chrome/Edge/Opera (Web Serial API required)
+window.PROJECTS = {
+    default: {
+        name: '${options.projectName}',
+        chip: '${options.chip}',
+        description: 'Flash firmware to your ${options.chip.toUpperCase()} device',
+        firmware: [
+            {
+                name: 'firmware.bin',
+                offset: 0x10000,
+                url: '${options.firmwareUrl || 'https://github.com/YOUR_USER/YOUR_REPO/releases/latest/download/firmware.bin'}'
+            }
+        ],
+        configSections: [
+${configSections.join(',\n')}
+        ]
+    }
+};
+`;
 
-3. Connect your ESP32 device and flash firmware
+  await fs.writeFile(path.join(targetDir, 'js', 'projects-config.js'), configContent);
+
+  // Create package.json
+  const packageJson = {
+    name: path.basename(targetDir),
+    version: '1.0.0',
+    description: `${options.projectName} - ESP32 Web Flasher`,
+    type: 'module',
+    scripts: {
+      serve: 'npx serve . -l 3000'
+    }
+  };
+  await fs.writeJSON(path.join(targetDir, 'package.json'), packageJson, { spaces: 2 });
+
+  // Create README
+  const readme = `# ${options.projectName}
+
+ESP32 Web Flasher for ${options.projectName}
+
+## Quick Start
+
+\`\`\`bash
+npx serve . -l 3000
+\`\`\`
+
+Then open http://localhost:3000 in Chrome, Edge, or Opera.
+
+## Configuration
+
+Edit \`js/projects-config.js\` to:
+- Set your firmware URL
+- Add/remove configuration fields
+- Change project settings
 
 ## Deploy to GitHub Pages
 
-### One-Time Setup
-
-1. Push this project to GitHub
-2. Go to repository Settings → Pages
-3. Set Source to "GitHub Actions"
-
-### Automatic Deployment
-
-The included workflow (\`.github/workflows/deploy.yml\`) automatically deploys to GitHub Pages on every push to main.
-
-Your flasher will be live at: \`https://[username].github.io/[repo-name]/\`
-
-## Customization
-
-- **Configuration**: Edit \`js/projects-config.js\` to add your projects and firmware URLs
-- **Styling**: Modify \`styles.css\` for custom styles
-- **Layout**: Edit \`index.html\` for UI changes
-
-## Project Structure
-
-\`\`\`
-.
-├── index.html              # Main application
-├── styles.css              # Stylesheet
-├── js/                     # Application modules
-│   ├── main-app.js
-│   ├── config-manager.js
-│   ├── device-connection.js
-│   ├── firmware-flasher.js
-│   ├── flasher-ui.js
-│   ├── nvs-generator.js
-│   └── projects-config.js
-└── .github/
-    └── workflows/
-        └── deploy.yml      # GitHub Pages deployment
-
-\`\`\`
-
-## Browser Support
-
-Requires browsers with Web Serial API:
-- Chrome 89+
-- Edge 89+
-- Opera 75+
+1. Push to GitHub
+2. Settings → Pages → Source: "GitHub Actions"
+3. Your flasher will be at \`https://YOUR_USER.github.io/YOUR_REPO/\`
 
 ## Documentation
 
 https://github.com/adam-weber/esp-webflash-toolkit
 `;
 
-    await fs.writeFile(path.join(targetDir, 'README.md'), readme);
+  await fs.writeFile(path.join(targetDir, 'README.md'), readme);
+}
 
-    console.log('Done! Your ESP Web Flasher is ready.\n');
-    console.log('Next steps:');
-    console.log(`  cd ${targetDir}`);
-    console.log('  npx serve . -l 3000');
-    console.log('\nThen open http://localhost:3000 in your browser.');
-    console.log('\nFor GitHub Pages deployment, see README.md\n');
+async function quickScaffold(projectName) {
+  const targetDir = path.join(process.cwd(), projectName);
 
-  } catch (error) {
-    console.error('Error scaffolding project:', error.message);
+  if (!fs.existsSync(TEMPLATE_DIR)) {
+    console.error('Error: Template directory not found.');
     process.exit(1);
-  } finally {
-    rl.close();
   }
+
+  if (fs.existsSync(targetDir)) {
+    const answer = await question(`Directory "${projectName}" exists. Overwrite? (y/N): `);
+    if (answer.toLowerCase() !== 'y') {
+      console.log('Cancelled.');
+      process.exit(0);
+    }
+    await fs.remove(targetDir);
+  }
+
+  console.log(`\nScaffolding in ${targetDir}...`);
+  await fs.copy(TEMPLATE_DIR, targetDir);
+
+  // Create minimal package.json
+  const packageJson = {
+    name: projectName,
+    version: '1.0.0',
+    description: 'ESP32 Web Flasher',
+    type: 'module',
+    scripts: { serve: 'npx serve . -l 3000' }
+  };
+  await fs.writeJSON(path.join(targetDir, 'package.json'), packageJson, { spaces: 2 });
+
+  console.log('\n✅ Done!\n');
+  console.log(`  cd ${projectName}`);
+  console.log('  npx serve . -l 3000\n');
+}
+
+function generateFlashUrl(options) {
+  const base = 'https://adam-weber.github.io/esp-webflash-toolkit/examples/hosted/';
+  const params = new URLSearchParams();
+
+  if (options.name) params.set('name', options.name);
+  if (options.bin) params.set('bin', options.bin);
+  if (options.chip) params.set('chip', options.chip);
+  if (options.fields) params.set('fields', options.fields);
+
+  return `${base}?${params.toString()}`;
+}
+
+async function urlCommand() {
+  console.log('\n🔗 Generate Flash URL\n');
+
+  const name = await question('Project name: ');
+  const bin = await question('Firmware URL (.bin): ');
+  const chip = await select('Chip type:', ['esp32', 'esp32s2', 'esp32s3', 'esp32c3']);
+
+  const addWifi = (await question('Include WiFi config? (Y/n): ')).toLowerCase() !== 'n';
+
+  const url = generateFlashUrl({
+    name,
+    bin,
+    chip,
+    fields: addWifi ? 'wifi' : undefined
+  });
+
+  console.log('\n📎 Your flash URL:\n');
+  console.log(url);
+  console.log('\nShare this link - users can flash directly from their browser!\n');
 }
 
 function showHelp() {
   console.log(`
-ESP WebFlash Toolkit - Browser-based ESP32 flashing
+ESP WebFlash Toolkit - Let users flash your ESP32 from a browser
 
 Usage:
-  npx esp-webflash-toolkit create <project-name>    Create new flasher project
-  npx esp-webflash-toolkit init                     Initialize in current directory
-  npx esp-webflash-toolkit --help                   Show this help
+  npx esp-webflash-toolkit                    Interactive project setup
+  npx esp-webflash-toolkit create <name>      Quick scaffold (minimal prompts)
+  npx esp-webflash-toolkit url                Generate a hosted flash URL
+  npx esp-webflash-toolkit --help             Show this help
+
+Examples:
+  npx esp-webflash-toolkit                    # Interactive setup wizard
+  npx esp-webflash-toolkit create my-flasher  # Quick create
+  npx esp-webflash-toolkit url                # Get hosted URL (no setup needed!)
+
+Hosted Flasher (zero setup):
+  Add flash-config.json to your repo, then share:
+  https://adam-weber.github.io/esp-webflash-toolkit/examples/hosted/?repo=YOUR/REPO
 
 Library Usage:
   npm install esp-webflash-toolkit
 
-  import { ConfigManager } from 'esp-webflash-toolkit/config-manager';
-  import { FirmwareFlasher } from 'esp-webflash-toolkit/firmware-flasher';
-
-Examples:
-  npx esp-webflash-toolkit create my-device-flasher
-  npx esp-webflash-toolkit init
+  import { NVSGenerator } from 'esp-webflash-toolkit/nvs-generator';
+  import { PartitionTableGenerator } from 'esp-webflash-toolkit/partition-table-generator';
 `);
 }
 
@@ -172,27 +320,37 @@ async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
 
-  if (!command || command === '--help' || command === '-h') {
-    showHelp();
-    process.exit(0);
-  }
-
-  if (command === 'create') {
-    const projectName = args[1];
-    if (!projectName) {
-      console.error('Error: Please specify a project name');
-      console.error('Usage: npx esp-webflash-toolkit create <project-name>');
+  try {
+    if (command === '--help' || command === '-h') {
+      showHelp();
+    } else if (command === 'create') {
+      const projectName = args[1];
+      if (!projectName) {
+        console.error('Usage: npx esp-webflash-toolkit create <project-name>');
+        process.exit(1);
+      }
+      await quickScaffold(projectName);
+    } else if (command === 'url') {
+      await urlCommand();
+    } else if (command === 'init') {
+      // Init in current directory
+      await scaffoldProject(process.cwd(), {
+        projectName: path.basename(process.cwd()),
+        chip: 'esp32',
+        firmwareUrl: '',
+        addWifi: true,
+        customFields: []
+      });
+    } else if (!command) {
+      // No command = interactive mode
+      await interactiveSetup();
+    } else {
+      console.error(`Unknown command: ${command}`);
+      showHelp();
       process.exit(1);
     }
-    const targetDir = path.join(process.cwd(), projectName);
-    await scaffoldFlasher(targetDir);
-  } else if (command === 'init') {
-    const targetDir = process.cwd();
-    await scaffoldFlasher(targetDir);
-  } else {
-    console.error(`Unknown command: ${command}`);
-    showHelp();
-    process.exit(1);
+  } finally {
+    rl.close();
   }
 }
 

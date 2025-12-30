@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP Web Flasher</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f7;
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            color: #1d1d1f;
+        }
+
+        .subtitle {
+            color: #86868b;
+            font-size: 15px;
+            margin-bottom: 32px;
+        }
+
+        .chip-badge {
+            display: inline-block;
+            background: #e8e8ed;
+            color: #1d1d1f;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+
+        .status-box {
+            background: #f5f5f7;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .status-box.connected { background: rgba(0, 113, 227, 0.08); }
+        .status-box.flashing { background: rgba(255, 149, 0, 0.08); }
+        .status-box.success { background: rgba(52, 199, 89, 0.08); }
+        .status-box.error { background: rgba(255, 59, 48, 0.08); }
+
+        .status-text {
+            font-size: 17px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 4px;
+        }
+
+        .status-subtext {
+            font-size: 14px;
+            color: #86868b;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 17px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+
+        .btn-primary {
+            background: #0071e3;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #0077ed;
+        }
+
+        .btn-secondary {
+            background: #e8e8ed;
+            color: #1d1d1f;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e8e8ed;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 16px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #0071e3;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .log {
+            background: #1d1d1f;
+            color: #fff;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            height: 150px;
+            overflow-y: auto;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .log.visible { display: block; }
+
+        .log-line { margin-bottom: 4px; }
+        .log-line.info { color: #4fc3f7; }
+        .log-line.success { color: #34c759; }
+        .log-line.error { color: #ff453a; }
+        .log-line.warning { color: #ff9f0a; }
+
+        .config-section {
+            margin-bottom: 24px;
+        }
+
+        .config-section h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #86868b;
+            margin: 0 0 12px 0;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 15px;
+            color: #1d1d1f;
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #0071e3;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 13px;
+            color: #86868b;
+        }
+
+        .footer a {
+            color: #0071e3;
+            text-decoration: none;
+        }
+
+        /* Setup mode (no params) */
+        .setup-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .setup-card h1 {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .setup-card .subtitle {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .setup-card .form-group input,
+        .setup-card .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 15px;
+            background: white;
+        }
+
+        .generated-url {
+            background: #f5f5f7;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 24px;
+            word-break: break-all;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+            display: none;
+        }
+
+        .generated-url.visible { display: block; }
+
+        .copy-btn {
+            margin-top: 12px;
+            width: 100%;
+        }
+
+        .or-divider {
+            text-align: center;
+            color: #86868b;
+            margin: 24px 0;
+            font-size: 14px;
+        }
+
+        .repo-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .repo-input-group input {
+            flex: 1;
+        }
+
+        .repo-input-group button {
+            padding: 12px 20px;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Setup Mode (shown when no params) -->
+        <div id="setup-view" class="setup-card" style="display: none;">
+            <h1>ESP Web Flasher</h1>
+            <p class="subtitle">Create a flash link for your project</p>
+
+            <div class="form-group">
+                <label>Project Name</label>
+                <input type="text" id="setup-name" placeholder="My Awesome Project">
+            </div>
+
+            <div class="form-group">
+                <label>Firmware URL (.bin)</label>
+                <input type="text" id="setup-bin" placeholder="https://github.com/user/repo/releases/latest/download/firmware.bin">
+            </div>
+
+            <div class="form-group">
+                <label>Chip Type</label>
+                <select id="setup-chip">
+                    <option value="esp32">ESP32</option>
+                    <option value="esp32s2">ESP32-S2</option>
+                    <option value="esp32s3">ESP32-S3</option>
+                    <option value="esp32c3">ESP32-C3</option>
+                    <option value="esp8266">ESP8266</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary" id="generate-url-btn">Generate Flash Link</button>
+
+            <div id="generated-url" class="generated-url"></div>
+            <button class="btn btn-secondary copy-btn" id="copy-url-btn" style="display: none;">Copy Link</button>
+
+            <div class="or-divider">— or load from repo —</div>
+
+            <div class="form-group">
+                <label>GitHub Repo with flash-config.json</label>
+                <div class="repo-input-group">
+                    <input type="text" id="setup-repo" placeholder="username/repo">
+                    <button class="btn btn-secondary" id="load-repo-btn">Load</button>
+                </div>
+            </div>
+
+            <div class="footer">
+                <a href="https://github.com/adam-weber/esp-webflash-toolkit">ESP WebFlash Toolkit</a>
+            </div>
+        </div>
+
+        <!-- Flash Mode (shown with params) -->
+        <div id="flash-view" class="card" style="display: none;">
+            <h1 id="project-name">ESP Project</h1>
+            <p class="subtitle" id="project-subtitle">Flash firmware to your device</p>
+
+            <div id="config-fields"></div>
+
+            <div id="status-box" class="status-box">
+                <div class="status-text" id="status-text">Ready to connect</div>
+                <div class="status-subtext" id="status-subtext">Click Connect to begin</div>
+            </div>
+
+            <div class="progress-bar" id="progress-bar" style="display: none;">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+
+            <button class="btn btn-primary" id="connect-btn">Connect Device</button>
+            <button class="btn btn-primary" id="flash-btn" disabled>Flash Firmware</button>
+
+            <div class="log" id="log"></div>
+
+            <div class="footer">
+                Powered by <a href="https://github.com/adam-weber/esp-webflash-toolkit">ESP WebFlash Toolkit</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Parse URL params
+        const params = new URLSearchParams(window.location.search);
+        const config = {
+            name: params.get('name') || params.get('n'),
+            bin: params.get('bin') || params.get('b'),
+            chip: params.get('chip') || params.get('c') || 'esp32',
+            repo: params.get('repo') || params.get('r'),
+            // Config fields (comma-separated: wifi,mqtt,etc)
+            fields: params.get('fields') || params.get('f'),
+            // NVS offset (default 0x9000)
+            nvsOffset: parseInt(params.get('nvs') || '0x9000', 16),
+            // Flash offset for main firmware
+            offset: parseInt(params.get('offset') || params.get('o') || '0x10000', 16)
+        };
+
+        const setupView = document.getElementById('setup-view');
+        const flashView = document.getElementById('flash-view');
+
+        // State
+        let transport = null;
+        let espStub = null;
+        let isConnected = false;
+
+        // Logging
+        const logEl = document.getElementById('log');
+        function log(msg, type = 'info') {
+            logEl.classList.add('visible');
+            const line = document.createElement('div');
+            line.className = `log-line ${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateStatus(status, text, subtext) {
+            const box = document.getElementById('status-box');
+            box.className = `status-box ${status}`;
+            document.getElementById('status-text').textContent = text;
+            document.getElementById('status-subtext').textContent = subtext;
+        }
+
+        // Check if we have enough params to show flash view
+        async function init() {
+            // Try to load from repo first
+            if (config.repo && !config.bin) {
+                await loadFromRepo(config.repo);
+                return;
+            }
+
+            if (config.name && config.bin) {
+                showFlashView();
+            } else {
+                showSetupView();
+            }
+        }
+
+        async function loadFromRepo(repo) {
+            try {
+                // Try to fetch flash-config.json from the repo
+                const url = `https://raw.githubusercontent.com/${repo}/main/flash-config.json`;
+                const res = await fetch(url);
+                if (!res.ok) {
+                    // Try master branch
+                    const url2 = `https://raw.githubusercontent.com/${repo}/master/flash-config.json`;
+                    const res2 = await fetch(url2);
+                    if (!res2.ok) throw new Error('flash-config.json not found');
+                    const json = await res2.json();
+                    applyConfig(json, repo);
+                } else {
+                    const json = await res.json();
+                    applyConfig(json, repo);
+                }
+            } catch (e) {
+                console.error('Failed to load from repo:', e);
+                showSetupView();
+                alert(`Could not load flash-config.json from ${repo}`);
+            }
+        }
+
+        function applyConfig(json, repo) {
+            config.name = json.name || repo.split('/')[1];
+            config.bin = json.firmware || json.bin;
+            config.chip = json.chip || 'esp32';
+            config.offset = parseInt(json.offset || '0x10000', 16);
+            config.nvsOffset = parseInt(json.nvsOffset || '0x9000', 16);
+            config.fields = json.fields; // Array of field configs
+
+            // Resolve relative URLs to GitHub releases
+            if (config.bin && !config.bin.startsWith('http')) {
+                config.bin = `https://github.com/${repo}/releases/latest/download/${config.bin}`;
+            }
+
+            showFlashView();
+        }
+
+        function showSetupView() {
+            setupView.style.display = 'block';
+            flashView.style.display = 'none';
+
+            // Generate URL button
+            document.getElementById('generate-url-btn').onclick = () => {
+                const name = document.getElementById('setup-name').value.trim();
+                const bin = document.getElementById('setup-bin').value.trim();
+                const chip = document.getElementById('setup-chip').value;
+
+                if (!name || !bin) {
+                    alert('Please fill in project name and firmware URL');
+                    return;
+                }
+
+                const url = new URL(window.location.href.split('?')[0]);
+                url.searchParams.set('name', name);
+                url.searchParams.set('bin', bin);
+                url.searchParams.set('chip', chip);
+
+                const urlStr = url.toString();
+                document.getElementById('generated-url').textContent = urlStr;
+                document.getElementById('generated-url').classList.add('visible');
+                document.getElementById('copy-url-btn').style.display = 'block';
+            };
+
+            // Copy URL button
+            document.getElementById('copy-url-btn').onclick = () => {
+                const url = document.getElementById('generated-url').textContent;
+                navigator.clipboard.writeText(url);
+                document.getElementById('copy-url-btn').textContent = 'Copied!';
+                setTimeout(() => {
+                    document.getElementById('copy-url-btn').textContent = 'Copy Link';
+                }, 2000);
+            };
+
+            // Load from repo button
+            document.getElementById('load-repo-btn').onclick = async () => {
+                const repo = document.getElementById('setup-repo').value.trim();
+                if (!repo) {
+                    alert('Please enter a GitHub repo (e.g., username/repo)');
+                    return;
+                }
+                await loadFromRepo(repo);
+            };
+        }
+
+        function showFlashView() {
+            setupView.style.display = 'none';
+            flashView.style.display = 'block';
+
+            document.getElementById('project-name').textContent = config.name;
+            document.getElementById('project-subtitle').innerHTML =
+                `Flash firmware to your device <span class="chip-badge">${config.chip.toUpperCase()}</span>`;
+
+            // Render config fields if specified
+            renderConfigFields();
+
+            // Connect button
+            document.getElementById('connect-btn').onclick = connect;
+
+            // Flash button
+            document.getElementById('flash-btn').onclick = flash;
+        }
+
+        function renderConfigFields() {
+            const container = document.getElementById('config-fields');
+            container.innerHTML = '';
+
+            // Parse fields param: wifi,mqtt or use array from flash-config.json
+            let fields = [];
+            if (typeof config.fields === 'string') {
+                fields = config.fields.split(',').map(f => f.trim());
+            } else if (Array.isArray(config.fields)) {
+                fields = config.fields;
+            }
+
+            if (fields.length === 0) return;
+
+            // Predefined field templates
+            const templates = {
+                wifi: [
+                    { key: 'wifi_ssid', label: 'WiFi SSID', type: 'text' },
+                    { key: 'wifi_pass', label: 'WiFi Password', type: 'password' }
+                ],
+                mqtt: [
+                    { key: 'mqtt_host', label: 'MQTT Host', type: 'text' },
+                    { key: 'mqtt_user', label: 'MQTT Username', type: 'text' },
+                    { key: 'mqtt_pass', label: 'MQTT Password', type: 'password' }
+                ]
+            };
+
+            const section = document.createElement('div');
+            section.className = 'config-section';
+            section.innerHTML = '<h3>Configuration</h3>';
+
+            fields.forEach(field => {
+                if (typeof field === 'string' && templates[field]) {
+                    // Use template
+                    templates[field].forEach(f => {
+                        section.appendChild(createFieldInput(f));
+                    });
+                } else if (typeof field === 'object') {
+                    // Custom field from flash-config.json
+                    section.appendChild(createFieldInput(field));
+                }
+            });
+
+            container.appendChild(section);
+        }
+
+        function createFieldInput(field) {
+            const group = document.createElement('div');
+            group.className = 'form-group';
+            group.innerHTML = `
+                <label>${field.label || field.key}</label>
+                <input type="${field.type || 'text'}"
+                       id="field-${field.key}"
+                       data-nvs-key="${field.key}"
+                       placeholder="${field.placeholder || ''}">
+            `;
+            return group;
+        }
+
+        function getConfigValues() {
+            const values = {};
+            document.querySelectorAll('[data-nvs-key]').forEach(input => {
+                const key = input.dataset.nvsKey;
+                const value = input.value.trim();
+                if (value) values[key] = value;
+            });
+            return values;
+        }
+
+        async function connect() {
+            try {
+                updateStatus('', 'Connecting...', 'Select your device');
+                log('Requesting serial port...');
+
+                const port = await navigator.serial.requestPort();
+                log('Port selected, opening connection...');
+
+                const { Transport, ESPLoader } = await import('https://unpkg.com/esptool-js@0.4.5/bundle.js');
+
+                transport = new Transport(port, true);
+                espStub = new ESPLoader({
+                    transport,
+                    baudrate: 115200,
+                    terminal: {
+                        clean: () => {},
+                        writeLine: (data) => log(data),
+                        write: (data) => log(data)
+                    }
+                });
+
+                const chip = await espStub.main();
+                log(`Connected: ${chip}`, 'success');
+
+                isConnected = true;
+                updateStatus('connected', 'Connected', chip);
+                document.getElementById('flash-btn').disabled = false;
+                document.getElementById('connect-btn').textContent = 'Reconnect';
+
+            } catch (e) {
+                log(`Connection failed: ${e.message}`, 'error');
+                updateStatus('error', 'Connection Failed', e.message);
+            }
+        }
+
+        async function flash() {
+            if (!isConnected || !espStub) {
+                alert('Please connect a device first');
+                return;
+            }
+
+            try {
+                document.getElementById('flash-btn').disabled = true;
+                updateStatus('flashing', 'Downloading...', 'Fetching firmware');
+
+                // Download firmware
+                log(`Downloading firmware from ${config.bin}...`);
+                const response = await fetch(config.bin);
+                if (!response.ok) throw new Error(`Failed to download: ${response.status}`);
+
+                const firmwareData = await response.arrayBuffer();
+                log(`Downloaded ${(firmwareData.byteLength / 1024).toFixed(1)} KB`, 'success');
+
+                // Prepare flash files
+                const flashFiles = [];
+
+                // Check if we have config values to flash as NVS
+                const configValues = getConfigValues();
+                if (Object.keys(configValues).length > 0) {
+                    log('Generating NVS partition...');
+                    const nvsData = generateNVS(configValues);
+                    flashFiles.push({
+                        address: config.nvsOffset,
+                        data: nvsData
+                    });
+                    log(`NVS partition: ${nvsData.byteLength} bytes at 0x${config.nvsOffset.toString(16)}`, 'info');
+                }
+
+                // Add main firmware
+                flashFiles.push({
+                    address: config.offset,
+                    data: new Uint8Array(firmwareData)
+                });
+                log(`Firmware: ${firmwareData.byteLength} bytes at 0x${config.offset.toString(16)}`, 'info');
+
+                // Flash each file
+                updateStatus('flashing', 'Flashing...', '0%');
+                document.getElementById('progress-bar').style.display = 'block';
+
+                for (const file of flashFiles) {
+                    log(`Flashing ${file.data.byteLength} bytes to 0x${file.address.toString(16)}...`);
+
+                    await espStub.flashData(
+                        file.data,
+                        file.address,
+                        (pct) => {
+                            document.getElementById('progress-fill').style.width = `${pct}%`;
+                            updateStatus('flashing', 'Flashing...', `${Math.round(pct)}%`);
+                        }
+                    );
+                }
+
+                log('Flash complete!', 'success');
+                updateStatus('success', 'Flash Complete!', 'You can disconnect the device');
+
+                // Reset device
+                log('Resetting device...');
+                await espStub.hardReset();
+
+            } catch (e) {
+                log(`Flash failed: ${e.message}`, 'error');
+                updateStatus('error', 'Flash Failed', e.message);
+            } finally {
+                document.getElementById('flash-btn').disabled = false;
+            }
+        }
+
+        // Simple NVS generator (inline for standalone use)
+        function generateNVS(data, partitionSize = 0x6000) {
+            const PAGE_SIZE = 4096;
+            const ENTRY_SIZE = 32;
+            const binary = new Uint8Array(partitionSize);
+            binary.fill(0xFF);
+
+            let pageIndex = 0;
+            let entryIndex = 1;
+            const namespace = 'config';
+            const namespaceIndex = 1;
+
+            // Write namespace entry
+            writeEntry(binary, pageIndex, entryIndex++, {
+                namespace: 0,
+                type: 0x01,
+                span: 1,
+                key: namespace,
+                data: new Uint8Array([namespaceIndex])
+            });
+
+            // Write each key-value
+            for (const [key, value] of Object.entries(data)) {
+                const entry = createEntry(namespaceIndex, key, value);
+                writeEntry(binary, pageIndex, entryIndex, entry);
+                entryIndex += entry.span;
+            }
+
+            // Finalize page
+            const view = new DataView(binary.buffer);
+            view.setUint32(0, 0xFFFFFFFE, true); // PAGE_STATE_ACTIVE
+            view.setUint32(4, 0, true); // Sequence number
+
+            return binary;
+
+            function createEntry(nsIndex, key, value) {
+                const encoder = new TextEncoder();
+                const strBytes = encoder.encode(value);
+                const data = new Uint8Array(strBytes.length + 1);
+                data.set(strBytes);
+                data[strBytes.length] = 0;
+
+                return {
+                    namespace: nsIndex,
+                    type: 0x21, // TYPE_STR
+                    span: 1 + Math.ceil(data.length / ENTRY_SIZE),
+                    key: key,
+                    data: data
+                };
+            }
+
+            function writeEntry(binary, pageIndex, entryIndex, entry) {
+                const offset = pageIndex * PAGE_SIZE + 32 + entryIndex * ENTRY_SIZE;
+
+                binary[offset] = entry.namespace;
+                binary[offset + 1] = entry.type;
+                binary[offset + 2] = entry.span;
+                binary[offset + 3] = 0xFF;
+
+                const keyBytes = new TextEncoder().encode(entry.key.substring(0, 15));
+                binary.set(keyBytes, offset + 8);
+
+                if (entry.type === 0x21) {
+                    const view = new DataView(binary.buffer);
+                    view.setUint16(offset + 24, entry.data.length, true);
+
+                    let dataOffset = 0;
+                    for (let i = 1; i < entry.span; i++) {
+                        const nextOffset = offset + i * ENTRY_SIZE;
+                        const chunk = entry.data.slice(dataOffset, dataOffset + ENTRY_SIZE);
+                        binary.set(chunk, nextOffset);
+                        dataOffset += ENTRY_SIZE;
+                    }
+                } else {
+                    binary.set(entry.data, offset + 24);
+                }
+            }
+        }
+
+        // Initialize
+        init();
+    </script>
+</body>
+</html>

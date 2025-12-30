@@ -1,0 +1,16 @@
+{
+  "name": "My ESP32 Project",
+  "firmware": "firmware.bin",
+  "chip": "esp32",
+  "offset": "0x10000",
+  "nvsOffset": "0x9000",
+  "fields": [
+    "wifi",
+    {
+      "key": "device_name",
+      "label": "Device Name",
+      "type": "text",
+      "placeholder": "my-device-001"
+    }
+  ]
+}
