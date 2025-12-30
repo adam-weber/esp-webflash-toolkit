@@ -5,10 +5,8 @@ pnpm-lock.yaml
 
 # Build output
 dist/
-templates/flasher/js/
 
 # GitBook build artifacts
-_book/
 .gitbook/
 *.pdf
 
