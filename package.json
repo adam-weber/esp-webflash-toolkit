@@ -46,7 +46,7 @@
     "build": "node scripts/build.js",
     "dev": "node bin/cli.js",
     "prepublishOnly": "npm run build",
-    "docs:build": "npx honkit build docs docs/_book",
+    "docs:build": "npx honkit build docs",
     "docs:serve": "npx honkit serve docs",
     "docs:pdf": "npx honkit pdf docs esp-webflash-toolkit-docs.pdf"
   },

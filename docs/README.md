@@ -2,6 +2,8 @@
 
 A browser-based toolkit for flashing ESP32/ESP8266 firmware and generating NVS configuration partitions - no toolchain required.
 
+**[Try the Web Flasher Demo](../examples/flasher/)** | **[Partition Table Generator](../examples/partition-table-example.html)**
+
 ## What It Does
 
 - **Flash firmware** directly from a web browser using Web Serial API

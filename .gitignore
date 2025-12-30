@@ -5,7 +5,8 @@ pnpm-lock.yaml
 
 # Build output (dist/ is committed for CDN/direct use)
 
-# GitBook build artifacts
+# GitBook build artifacts (built by CI)
+docs/_book/
 .gitbook/
 *.pdf
 
