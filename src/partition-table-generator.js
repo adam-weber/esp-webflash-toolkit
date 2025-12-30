@@ -1,0 +1,612 @@
+/**
+ * Partition Table Generator for ESP32
+ *
+ * Generates partition table binaries that can be flashed to ESP32 devices.
+ * This is a client-side JavaScript implementation of ESP-IDF's gen_esp32part.py.
+ *
+ * @author Adam Weber (github: adam-weber)
+ *
+ * Partition Table Format:
+ * - Located at 0x8000 in flash (default)
+ * - Each entry is 32 bytes
+ * - Maximum 95 entries (0xC00 bytes)
+ * - Full sector size: 0x1000 (4KB)
+ * - MD5 checksum at end for integrity
+ */
+
+class PartitionTableGenerator {
+    constructor() {
+        this.PARTITION_TABLE_SIZE = 0x1000;  // 4KB sector
+        this.MAX_PARTITION_LENGTH = 0xC00;   // 3KB (96 entries max)
+        this.ENTRY_SIZE = 32;
+        this.MAGIC_BYTES = 0xAA50;
+        this.MD5_PARTITION_BEGIN = [0xEB, 0xEB];
+
+        // Partition types
+        this.TYPE_APP = 0x00;
+        this.TYPE_DATA = 0x01;
+
+        // App subtypes
+        this.SUBTYPE_APP_FACTORY = 0x00;
+        this.SUBTYPE_APP_OTA_MIN = 0x10;
+        this.SUBTYPE_APP_OTA_MAX = 0x1F;
+        this.SUBTYPE_APP_TEST = 0x20;
+
+        // Data subtypes
+        this.SUBTYPE_DATA_OTA = 0x00;
+        this.SUBTYPE_DATA_RF = 0x01;
+        this.SUBTYPE_DATA_WIFI = 0x02;
+        this.SUBTYPE_DATA_NVS = 0x02;  // Same as WIFI
+        this.SUBTYPE_DATA_COREDUMP = 0x03;
+        this.SUBTYPE_DATA_NVS_KEYS = 0x04;
+        this.SUBTYPE_DATA_EFUSE_EM = 0x05;
+        this.SUBTYPE_DATA_ESPHTTPD = 0x80;
+        this.SUBTYPE_DATA_FAT = 0x81;
+        this.SUBTYPE_DATA_SPIFFS = 0x82;
+        this.SUBTYPE_DATA_LITTLEFS = 0x83;
+
+        // Flags
+        this.FLAG_ENCRYPTED = 1 << 0;
+        this.FLAG_READONLY = 1 << 1;
+
+        // Alignment requirement
+        this.PARTITION_ALIGNMENT = 0x1000;  // 4KB
+    }
+
+    /**
+     * Generate partition table binary from partition definitions
+     * @param {Array} partitions - Array of partition objects
+     * @returns {Uint8Array} - Binary data ready to flash
+     *
+     * Partition object format:
+     * {
+     *   name: string (max 16 chars),
+     *   type: number or string ('app', 'data'),
+     *   subtype: number or string,
+     *   offset: number (hex or decimal),
+     *   size: number (hex or decimal),
+     *   flags: {encrypted: boolean, readonly: boolean}
+     * }
+     */
+    generate(partitions) {
+        const binary = new Uint8Array(this.PARTITION_TABLE_SIZE);
+        binary.fill(0xFF);  // Initialize with 0xFF (erased flash state)
+
+        let offset = 0;
+
+        // Write each partition entry
+        for (let i = 0; i < partitions.length; i++) {
+            const partition = this.normalizePartition(partitions[i]);
+            this.validatePartition(partition, i);
+            this.writeEntry(binary, offset, partition);
+            offset += this.ENTRY_SIZE;
+
+            if (offset >= this.MAX_PARTITION_LENGTH) {
+                throw new Error('Too many partition entries (max 95)');
+            }
+        }
+
+        // Calculate MD5 checksum over all entries
+        const tableData = binary.slice(0, offset);
+        const md5sum = this.calculateMD5(tableData);
+
+        // Write MD5 entry
+        this.writeMD5Entry(binary, offset, md5sum);
+
+        return binary;
+    }
+
+    /**
+     * Normalize partition object to standard format
+     */
+    normalizePartition(partition) {
+        const normalized = { ...partition };
+
+        // Convert type string to number
+        if (typeof normalized.type === 'string') {
+            const typeMap = { 'app': this.TYPE_APP, 'data': this.TYPE_DATA };
+            normalized.type = typeMap[normalized.type.toLowerCase()];
+            if (normalized.type === undefined) {
+                throw new Error(`Unknown partition type: ${partition.type}`);
+            }
+        }
+
+        // Convert subtype string to number
+        if (typeof normalized.subtype === 'string') {
+            normalized.subtype = this.parseSubtype(normalized.subtype, normalized.type);
+        }
+
+        // Parse hex strings to numbers
+        if (typeof normalized.offset === 'string') {
+            normalized.offset = parseInt(normalized.offset, 16);
+        }
+        if (typeof normalized.size === 'string') {
+            normalized.size = parseInt(normalized.size, 16);
+        }
+
+        // Parse flags
+        if (!normalized.flags) {
+            normalized.flags = 0;
+        } else if (typeof normalized.flags === 'object') {
+            let flagBits = 0;
+            if (normalized.flags.encrypted) flagBits |= this.FLAG_ENCRYPTED;
+            if (normalized.flags.readonly) flagBits |= this.FLAG_READONLY;
+            normalized.flags = flagBits;
+        }
+
+        return normalized;
+    }
+
+    /**
+     * Parse subtype string to number based on partition type
+     */
+    parseSubtype(subtypeStr, type) {
+        const subtypeLower = subtypeStr.toLowerCase();
+
+        if (type === this.TYPE_APP) {
+            const appSubtypes = {
+                'factory': this.SUBTYPE_APP_FACTORY,
+                'test': this.SUBTYPE_APP_TEST
+            };
+            // Handle ota_0 through ota_15
+            if (subtypeLower.startsWith('ota_')) {
+                const otaNum = parseInt(subtypeLower.substring(4));
+                if (otaNum >= 0 && otaNum <= 15) {
+                    return this.SUBTYPE_APP_OTA_MIN + otaNum;
+                }
+            }
+            return appSubtypes[subtypeLower];
+        } else if (type === this.TYPE_DATA) {
+            const dataSubtypes = {
+                'ota': this.SUBTYPE_DATA_OTA,
+                'rf': this.SUBTYPE_DATA_RF,
+                'wifi': this.SUBTYPE_DATA_WIFI,
+                'nvs': this.SUBTYPE_DATA_NVS,
+                'coredump': this.SUBTYPE_DATA_COREDUMP,
+                'nvs_keys': this.SUBTYPE_DATA_NVS_KEYS,
+                'efuse_em': this.SUBTYPE_DATA_EFUSE_EM,
+                'esphttpd': this.SUBTYPE_DATA_ESPHTTPD,
+                'fat': this.SUBTYPE_DATA_FAT,
+                'spiffs': this.SUBTYPE_DATA_SPIFFS,
+                'littlefs': this.SUBTYPE_DATA_LITTLEFS
+            };
+            return dataSubtypes[subtypeLower];
+        }
+
+        throw new Error(`Unknown subtype: ${subtypeStr}`);
+    }
+
+    /**
+     * Validate partition entry
+     */
+    validatePartition(partition, index) {
+        // Check name length
+        if (!partition.name || partition.name.length === 0) {
+            throw new Error(`Partition ${index}: name is required`);
+        }
+        if (partition.name.length > 16) {
+            throw new Error(`Partition ${index}: name too long (max 16 chars): ${partition.name}`);
+        }
+
+        // Check type and subtype
+        if (partition.type === undefined) {
+            throw new Error(`Partition ${index}: type is required`);
+        }
+        if (partition.subtype === undefined) {
+            throw new Error(`Partition ${index}: subtype is required`);
+        }
+
+        // Check offset alignment
+        if (partition.offset % this.PARTITION_ALIGNMENT !== 0) {
+            throw new Error(
+                `Partition ${index} (${partition.name}): offset 0x${partition.offset.toString(16)} ` +
+                `is not aligned to 0x${this.PARTITION_ALIGNMENT.toString(16)} bytes`
+            );
+        }
+
+        // Check size
+        if (!partition.size || partition.size <= 0) {
+            throw new Error(`Partition ${index} (${partition.name}): size must be positive`);
+        }
+    }
+
+    /**
+     * Validate entire partition table for overlaps and gaps
+     */
+    validateTable(partitions) {
+        const errors = [];
+        const warnings = [];
+
+        // Sort by offset
+        const sorted = [...partitions].sort((a, b) => a.offset - b.offset);
+
+        // Check for overlaps
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const current = sorted[i];
+            const next = sorted[i + 1];
+            const currentEnd = current.offset + current.size;
+
+            if (currentEnd > next.offset) {
+                errors.push(
+                    `Partition '${current.name}' (ends at 0x${currentEnd.toString(16)}) ` +
+                    `overlaps with '${next.name}' (starts at 0x${next.offset.toString(16)})`
+                );
+            } else if (currentEnd < next.offset) {
+                const gap = next.offset - currentEnd;
+                warnings.push(
+                    `Gap of ${gap} bytes (0x${gap.toString(16)}) between ` +
+                    `'${current.name}' and '${next.name}'`
+                );
+            }
+        }
+
+        return { errors, warnings };
+    }
+
+    /**
+     * Write a partition entry to the binary
+     */
+    writeEntry(binary, offset, partition) {
+        const view = new DataView(binary.buffer);
+
+        // Entry format (32 bytes):
+        // [0-1]   Magic bytes (0xAA50)
+        // [2]     Type
+        // [3]     Subtype
+        // [4-7]   Offset (little-endian)
+        // [8-11]  Size (little-endian)
+        // [12-27] Name (16 bytes, null-terminated)
+        // [28-31] Flags (little-endian)
+
+        view.setUint16(offset + 0, this.MAGIC_BYTES, true);  // Little-endian
+        view.setUint8(offset + 2, partition.type);
+        view.setUint8(offset + 3, partition.subtype);
+        view.setUint32(offset + 4, partition.offset, true);
+        view.setUint32(offset + 8, partition.size, true);
+
+        // Write name (max 16 bytes including null terminator)
+        const nameBytes = new TextEncoder().encode(partition.name.substring(0, 15));
+        binary.set(nameBytes, offset + 12);
+        // Null-terminate and pad
+        for (let i = nameBytes.length; i < 16; i++) {
+            binary[offset + 12 + i] = 0;
+        }
+
+        view.setUint32(offset + 28, partition.flags, true);
+    }
+
+    /**
+     * Write MD5 checksum entry
+     */
+    writeMD5Entry(binary, offset, md5Hash) {
+        const view = new DataView(binary.buffer);
+
+        // MD5 entry format:
+        // [0-1]   0xEBEB marker
+        // [2-15]  0xFF padding
+        // [16-31] MD5 hash (16 bytes)
+
+        view.setUint8(offset + 0, this.MD5_PARTITION_BEGIN[0]);
+        view.setUint8(offset + 1, this.MD5_PARTITION_BEGIN[1]);
+
+        // Padding (already 0xFF from initialization)
+        for (let i = 2; i < 16; i++) {
+            binary[offset + i] = 0xFF;
+        }
+
+        // Write MD5 hash
+        binary.set(md5Hash, offset + 16);
+    }
+
+    /**
+     * Parse partition table binary back to partition objects
+     * @param {Uint8Array} binary - Partition table binary data
+     * @returns {Object} - {partitions: Array, md5: Uint8Array}
+     */
+    parse(binary) {
+        const partitions = [];
+        const view = new DataView(binary.buffer, binary.byteOffset, binary.byteLength);
+        let offset = 0;
+        let md5 = null;
+
+        while (offset < this.MAX_PARTITION_LENGTH) {
+            // Read magic bytes
+            const magic = view.getUint16(offset, true);
+
+            // Check for end of table (0xFFFF)
+            if (magic === 0xFFFF) {
+                break;
+            }
+
+            // Check for MD5 entry
+            if (view.getUint8(offset) === this.MD5_PARTITION_BEGIN[0] &&
+                view.getUint8(offset + 1) === this.MD5_PARTITION_BEGIN[1]) {
+                md5 = new Uint8Array(binary.buffer, binary.byteOffset + offset + 16, 16);
+                break;
+            }
+
+            // Check for valid magic
+            if (magic !== this.MAGIC_BYTES) {
+                console.warn(`Invalid magic bytes at offset ${offset}: 0x${magic.toString(16)}`);
+                break;
+            }
+
+            // Parse partition entry
+            const type = view.getUint8(offset + 2);
+            const subtype = view.getUint8(offset + 3);
+            const partOffset = view.getUint32(offset + 4, true);
+            const size = view.getUint32(offset + 8, true);
+
+            // Read name (null-terminated)
+            const nameBytes = new Uint8Array(binary.buffer, binary.byteOffset + offset + 12, 16);
+            const nameEnd = nameBytes.indexOf(0);
+            const name = new TextDecoder().decode(nameBytes.slice(0, nameEnd > 0 ? nameEnd : 16));
+
+            const flags = view.getUint32(offset + 28, true);
+
+            partitions.push({
+                name,
+                type: this.getTypeName(type),
+                typeValue: type,
+                subtype: this.getSubtypeName(type, subtype),
+                subtypeValue: subtype,
+                offset: partOffset,
+                size: size,
+                flags: {
+                    encrypted: !!(flags & this.FLAG_ENCRYPTED),
+                    readonly: !!(flags & this.FLAG_READONLY)
+                }
+            });
+
+            offset += this.ENTRY_SIZE;
+        }
+
+        return { partitions, md5 };
+    }
+
+    /**
+     * Get human-readable type name
+     */
+    getTypeName(type) {
+        const types = {
+            [this.TYPE_APP]: 'app',
+            [this.TYPE_DATA]: 'data'
+        };
+        return types[type] || `0x${type.toString(16)}`;
+    }
+
+    /**
+     * Get human-readable subtype name
+     */
+    getSubtypeName(type, subtype) {
+        if (type === this.TYPE_APP) {
+            if (subtype === this.SUBTYPE_APP_FACTORY) return 'factory';
+            if (subtype === this.SUBTYPE_APP_TEST) return 'test';
+            if (subtype >= this.SUBTYPE_APP_OTA_MIN && subtype <= this.SUBTYPE_APP_OTA_MAX) {
+                return `ota_${subtype - this.SUBTYPE_APP_OTA_MIN}`;
+            }
+        } else if (type === this.TYPE_DATA) {
+            const subtypes = {
+                [this.SUBTYPE_DATA_OTA]: 'ota',
+                [this.SUBTYPE_DATA_RF]: 'rf',
+                [this.SUBTYPE_DATA_NVS]: 'nvs',
+                [this.SUBTYPE_DATA_COREDUMP]: 'coredump',
+                [this.SUBTYPE_DATA_NVS_KEYS]: 'nvs_keys',
+                [this.SUBTYPE_DATA_EFUSE_EM]: 'efuse_em',
+                [this.SUBTYPE_DATA_ESPHTTPD]: 'esphttpd',
+                [this.SUBTYPE_DATA_FAT]: 'fat',
+                [this.SUBTYPE_DATA_SPIFFS]: 'spiffs',
+                [this.SUBTYPE_DATA_LITTLEFS]: 'littlefs'
+            };
+            if (subtypes[subtype]) return subtypes[subtype];
+        }
+        return `0x${subtype.toString(16)}`;
+    }
+
+    /**
+     * Calculate MD5 hash using Web Crypto API
+     * @param {Uint8Array} data - Data to hash
+     * @returns {Promise<Uint8Array>} - MD5 hash (16 bytes)
+     */
+    async calculateMD5Async(data) {
+        // Web Crypto API doesn't support MD5, so we need a JS implementation
+        // For now, use a simple implementation
+        return this.calculateMD5(data);
+    }
+
+    /**
+     * Calculate MD5 hash (simple implementation)
+     * Based on: https://github.com/satazor/js-spark-md5
+     */
+    calculateMD5(data) {
+        // This is a placeholder - in production, use a proper MD5 library
+        // For now, implement a basic MD5 or use spark-md5
+        return this.md5(data);
+    }
+
+    /**
+     * Simple MD5 implementation for client-side use
+     * Reference: https://www.ietf.org/rfc/rfc1321.txt
+     */
+    md5(data) {
+        // MD5 implementation (simplified)
+        // In production, you should use a well-tested library like spark-md5
+
+        const hexChars = '0123456789abcdef';
+
+        function add32(a, b) {
+            return (a + b) & 0xFFFFFFFF;
+        }
+
+        function cmn(q, a, b, x, s, t) {
+            a = add32(add32(a, q), add32(x, t));
+            return add32((a << s) | (a >>> (32 - s)), b);
+        }
+
+        function ff(a, b, c, d, x, s, t) {
+            return cmn((b & c) | ((~b) & d), a, b, x, s, t);
+        }
+
+        function gg(a, b, c, d, x, s, t) {
+            return cmn((b & d) | (c & (~d)), a, b, x, s, t);
+        }
+
+        function hh(a, b, c, d, x, s, t) {
+            return cmn(b ^ c ^ d, a, b, x, s, t);
+        }
+
+        function ii(a, b, c, d, x, s, t) {
+            return cmn(c ^ (b | (~d)), a, b, x, s, t);
+        }
+
+        // Padding
+        const msgLen = data.length;
+        const padLen = ((msgLen + 8) >>> 6 << 4) + 14;
+        const padded = new Uint8Array((padLen + 2) * 4);
+        padded.set(data);
+        padded[msgLen] = 0x80;
+
+        // Append length in bits
+        const view = new DataView(padded.buffer);
+        view.setUint32((padLen + 1) * 4, msgLen * 8, true);
+
+        // Process 512-bit blocks
+        let a = 0x67452301;
+        let b = 0xEFCDAB89;
+        let c = 0x98BADCFE;
+        let d = 0x10325476;
+
+        for (let i = 0; i < padded.length; i += 64) {
+            const aa = a, bb = b, cc = c, dd = d;
+            const x = new Uint32Array(16);
+
+            for (let j = 0; j < 16; j++) {
+                x[j] = view.getUint32(i + j * 4, true);
+            }
+
+            a = ff(a, b, c, d, x[0], 7, 0xD76AA478);
+            d = ff(d, a, b, c, x[1], 12, 0xE8C7B756);
+            c = ff(c, d, a, b, x[2], 17, 0x242070DB);
+            b = ff(b, c, d, a, x[3], 22, 0xC1BDCEEE);
+            a = ff(a, b, c, d, x[4], 7, 0xF57C0FAF);
+            d = ff(d, a, b, c, x[5], 12, 0x4787C62A);
+            c = ff(c, d, a, b, x[6], 17, 0xA8304613);
+            b = ff(b, c, d, a, x[7], 22, 0xFD469501);
+            a = ff(a, b, c, d, x[8], 7, 0x698098D8);
+            d = ff(d, a, b, c, x[9], 12, 0x8B44F7AF);
+            c = ff(c, d, a, b, x[10], 17, 0xFFFF5BB1);
+            b = ff(b, c, d, a, x[11], 22, 0x895CD7BE);
+            a = ff(a, b, c, d, x[12], 7, 0x6B901122);
+            d = ff(d, a, b, c, x[13], 12, 0xFD987193);
+            c = ff(c, d, a, b, x[14], 17, 0xA679438E);
+            b = ff(b, c, d, a, x[15], 22, 0x49B40821);
+
+            a = gg(a, b, c, d, x[1], 5, 0xF61E2562);
+            d = gg(d, a, b, c, x[6], 9, 0xC040B340);
+            c = gg(c, d, a, b, x[11], 14, 0x265E5A51);
+            b = gg(b, c, d, a, x[0], 20, 0xE9B6C7AA);
+            a = gg(a, b, c, d, x[5], 5, 0xD62F105D);
+            d = gg(d, a, b, c, x[10], 9, 0x02441453);
+            c = gg(c, d, a, b, x[15], 14, 0xD8A1E681);
+            b = gg(b, c, d, a, x[4], 20, 0xE7D3FBC8);
+            a = gg(a, b, c, d, x[9], 5, 0x21E1CDE6);
+            d = gg(d, a, b, c, x[14], 9, 0xC33707D6);
+            c = gg(c, d, a, b, x[3], 14, 0xF4D50D87);
+            b = gg(b, c, d, a, x[8], 20, 0x455A14ED);
+            a = gg(a, b, c, d, x[13], 5, 0xA9E3E905);
+            d = gg(d, a, b, c, x[2], 9, 0xFCEFA3F8);
+            c = gg(c, d, a, b, x[7], 14, 0x676F02D9);
+            b = gg(b, c, d, a, x[12], 20, 0x8D2A4C8A);
+
+            a = hh(a, b, c, d, x[5], 4, 0xFFFA3942);
+            d = hh(d, a, b, c, x[8], 11, 0x8771F681);
+            c = hh(c, d, a, b, x[11], 16, 0x6D9D6122);
+            b = hh(b, c, d, a, x[14], 23, 0xFDE5380C);
+            a = hh(a, b, c, d, x[1], 4, 0xA4BEEA44);
+            d = hh(d, a, b, c, x[4], 11, 0x4BDECFA9);
+            c = hh(c, d, a, b, x[7], 16, 0xF6BB4B60);
+            b = hh(b, c, d, a, x[10], 23, 0xBEBFBC70);
+            a = hh(a, b, c, d, x[13], 4, 0x289B7EC6);
+            d = hh(d, a, b, c, x[0], 11, 0xEAA127FA);
+            c = hh(c, d, a, b, x[3], 16, 0xD4EF3085);
+            b = hh(b, c, d, a, x[6], 23, 0x04881D05);
+            a = hh(a, b, c, d, x[9], 4, 0xD9D4D039);
+            d = hh(d, a, b, c, x[12], 11, 0xE6DB99E5);
+            c = hh(c, d, a, b, x[15], 16, 0x1FA27CF8);
+            b = hh(b, c, d, a, x[2], 23, 0xC4AC5665);
+
+            a = ii(a, b, c, d, x[0], 6, 0xF4292244);
+            d = ii(d, a, b, c, x[7], 10, 0x432AFF97);
+            c = ii(c, d, a, b, x[14], 15, 0xAB9423A7);
+            b = ii(b, c, d, a, x[5], 21, 0xFC93A039);
+            a = ii(a, b, c, d, x[12], 6, 0x655B59C3);
+            d = ii(d, a, b, c, x[3], 10, 0x8F0CCC92);
+            c = ii(c, d, a, b, x[10], 15, 0xFFEFF47D);
+            b = ii(b, c, d, a, x[1], 21, 0x85845DD1);
+            a = ii(a, b, c, d, x[8], 6, 0x6FA87E4F);
+            d = ii(d, a, b, c, x[15], 10, 0xFE2CE6E0);
+            c = ii(c, d, a, b, x[6], 15, 0xA3014314);
+            b = ii(b, c, d, a, x[13], 21, 0x4E0811A1);
+            a = ii(a, b, c, d, x[4], 6, 0xF7537E82);
+            d = ii(d, a, b, c, x[11], 10, 0xBD3AF235);
+            c = ii(c, d, a, b, x[2], 15, 0x2AD7D2BB);
+            b = ii(b, c, d, a, x[9], 21, 0xEB86D391);
+
+            a = add32(a, aa);
+            b = add32(b, bb);
+            c = add32(c, cc);
+            d = add32(d, dd);
+        }
+
+        // Convert to bytes (little-endian)
+        const hash = new Uint8Array(16);
+        const hashView = new DataView(hash.buffer);
+        hashView.setUint32(0, a, true);
+        hashView.setUint32(4, b, true);
+        hashView.setUint32(8, c, true);
+        hashView.setUint32(12, d, true);
+
+        return hash;
+    }
+
+    /**
+     * Get predefined partition table templates
+     */
+    static getTemplates() {
+        return {
+            minimal: [
+                { name: 'nvs', type: 'data', subtype: 'nvs', offset: 0x9000, size: 0x6000 },
+                { name: 'phy_init', type: 'data', subtype: 'rf', offset: 0xf000, size: 0x1000 },
+                { name: 'factory', type: 'app', subtype: 'factory', offset: 0x10000, size: 0x100000 }
+            ],
+            ota: [
+                { name: 'nvs', type: 'data', subtype: 'nvs', offset: 0x9000, size: 0x6000 },
+                { name: 'otadata', type: 'data', subtype: 'ota', offset: 0xf000, size: 0x2000 },
+                { name: 'ota_0', type: 'app', subtype: 'ota_0', offset: 0x20000, size: 0x180000 },
+                { name: 'ota_1', type: 'app', subtype: 'ota_1', offset: 0x1A0000, size: 0x180000 }
+            ],
+            'ota-spiffs': [
+                { name: 'nvs', type: 'data', subtype: 'nvs', offset: 0x9000, size: 0x6000 },
+                { name: 'otadata', type: 'data', subtype: 'ota', offset: 0xf000, size: 0x2000 },
+                { name: 'ota_0', type: 'app', subtype: 'ota_0', offset: 0x20000, size: 0x180000 },
+                { name: 'ota_1', type: 'app', subtype: 'ota_1', offset: 0x1A0000, size: 0x180000 },
+                { name: 'spiffs', type: 'data', subtype: 'spiffs', offset: 0x320000, size: 0xE0000 }
+            ],
+            factory: [
+                { name: 'nvs', type: 'data', subtype: 'nvs', offset: 0x9000, size: 0x4000 },
+                { name: 'otadata', type: 'data', subtype: 'ota', offset: 0xd000, size: 0x2000 },
+                { name: 'phy_init', type: 'data', subtype: 'rf', offset: 0xf000, size: 0x1000 },
+                { name: 'factory', type: 'app', subtype: 'factory', offset: 0x10000, size: 0x100000 },
+                { name: 'ota_0', type: 'app', subtype: 'ota_0', offset: 0x110000, size: 0x100000 },
+                { name: 'ota_1', type: 'app', subtype: 'ota_1', offset: 0x210000, size: 0x100000 }
+            ]
+        };
+    }
+}
+
+// Expose to browser global scope and for module exports
+if (typeof window !== 'undefined') {
+    window.PartitionTableGenerator = PartitionTableGenerator;
+}
+
+export { PartitionTableGenerator };

@@ -1,9 +1,6 @@
 # Dependencies
 node_modules/
 
-# Built CSS
-styles.css
-
 # OS
 .DS_Store
 

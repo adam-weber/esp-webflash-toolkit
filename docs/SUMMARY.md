@@ -16,4 +16,5 @@
 
 ## Advanced Topics
 
+* [Partition Table Generator](partition-table-generator.md)
 * [Edge Cases](edge-cases.md)

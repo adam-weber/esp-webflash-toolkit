@@ -9,7 +9,8 @@
     "firmware",
     "flasher",
     "web-serial",
-    "nvs"
+    "nvs",
+    "partition-table"
   ],
   "author": "Adam Weber",
   "license": "MIT",
@@ -28,7 +29,8 @@
     "./device-connection": "./dist/device-connection.js",
     "./firmware-flasher": "./dist/firmware-flasher.js",
     "./flasher-ui": "./dist/flasher-ui.js",
-    "./nvs-generator": "./dist/nvs-generator.js"
+    "./nvs-generator": "./dist/nvs-generator.js",
+    "./partition-table-generator": "./dist/partition-table-generator.js"
   },
   "bin": {
     "esp-webflash-toolkit": "./bin/cli.js"

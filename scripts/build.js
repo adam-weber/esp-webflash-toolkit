@@ -40,7 +40,7 @@ async function main() {
     const outputPath = path.join(distDir, file);
 
     // Special handling for non-module files
-    if (file === 'projects-config.js' || file === 'nvs-generator.js') {
+    if (file === 'projects-config.js' || file === 'nvs-generator.js' || file === 'partition-table-generator.js') {
       await fs.copy(inputPath, outputPath);
       console.log(`  ${file} (copied)`);
       continue;

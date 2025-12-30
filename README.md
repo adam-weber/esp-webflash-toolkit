@@ -15,7 +15,7 @@ Built-in firmware routing detects chip variants automatically and loads the appr
 
 Available as both a complete web flasher and modular components for integration into existing tooling.
 
-### **[Launch the example web flasher ↗](https://adam-weber.github.io/esp-webflash-toolkit/flasher.html)**
+### **[Launch the example web flasher ↗](https://adam-weber.github.io/esp-webflash-toolkit/templates/flasher/index.html)**
 
 ## Installation
 
