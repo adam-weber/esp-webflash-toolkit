@@ -1,8 +1,12 @@
 # Source files (only publish built dist/)
 src/
 
+# Examples (for GitHub Pages, not npm)
+examples/
+
 # Documentation website (not needed in package)
 docs/
+docs-src/
 
 # Development files
 .github/
@@ -12,6 +16,7 @@ scripts/
 # Config files
 .gitignore
 .gitattributes
+.nojekyll
 
 # Documentation (except README)
 *.md
@@ -25,8 +30,9 @@ scripts/
 # OS
 .DS_Store
 
-# Tests (if you add them later)
+# Tests
 test/
 tests/
+test-*/
 *.test.js
 *.spec.js
