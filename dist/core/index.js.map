@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/core/index.js"],
+  "sourcesContent": ["/**\n * ESP WebFlash Toolkit - Core Library\n *\n * Headless, framework-agnostic library for flashing ESP32 devices from the browser.\n *\n * @example\n * import { ESPFlasher } from 'esp-webflash-toolkit';\n *\n * const flasher = new ESPFlasher({\n *   chip: 'esp32s3',\n *   firmwareUrl: 'https://...',\n *   fields: ['wifi', 'device_name']\n * });\n *\n * flasher.on('progress', ({ percent }) => console.log(`${percent}%`));\n *\n * await flasher.connect();\n * flasher.setConfig({ wifi_ssid: 'MyNetwork', wifi_pass: 'secret' });\n * await flasher.flash();\n */\n\n// Main orchestrator\nexport { ESPFlasher } from './flasher.js';\n\n// Individual components for advanced usage\nexport { DeviceConnection } from './device-connection.js';\nexport { FirmwareFlasher } from './firmware-flasher.js';\nexport { ConfigStore, FieldPresets, expandFieldPresets } from './config-store.js';\n\n// Pure utilities\nexport { NVSGenerator } from './nvs-generator.js';\nexport { PartitionTableGenerator } from './partition-table-generator.js';\n"],
+  "mappings": "AAsBA,SAAS,kBAAkB;AAG3B,SAAS,wBAAwB;AACjC,SAAS,uBAAuB;AAChC,SAAS,aAAa,cAAc,0BAA0B;AAG9D,SAAS,oBAAoB;AAC7B,SAAS,+BAA+B;",
+  "names": []
+}

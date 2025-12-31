@@ -1,8 +1,8 @@
 {
   "name": "esp-webflash-toolkit",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Browser-based ESP32 flashing toolkit - use as library or scaffold your own flasher",
+  "description": "Headless ESP32 flashing library for the browser - framework agnostic, event-driven",
   "keywords": [
     "esp32",
     "esp8266",
@@ -10,7 +10,8 @@
     "flasher",
     "web-serial",
     "nvs",
-    "partition-table"
+    "partition-table",
+    "esptool"
   ],
   "author": "Adam Weber",
   "license": "MIT",
@@ -22,15 +23,26 @@
     "url": "https://github.com/adam-weber/esp-webflash-toolkit/issues"
   },
   "homepage": "https://github.com/adam-weber/esp-webflash-toolkit#readme",
-  "main": "./dist/main-app.js",
+  "main": "./dist/core/index.js",
+  "module": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
   "exports": {
-    ".": "./dist/main-app.js",
-    "./config-manager": "./dist/config-manager.js",
-    "./device-connection": "./dist/device-connection.js",
-    "./firmware-flasher": "./dist/firmware-flasher.js",
-    "./flasher-ui": "./dist/flasher-ui.js",
-    "./nvs-generator": "./dist/nvs-generator.js",
-    "./partition-table-generator": "./dist/partition-table-generator.js"
+    ".": {
+      "import": "./dist/core/index.js",
+      "types": "./dist/core/index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/core/index.js"
+    },
+    "./adapters/vanilla": {
+      "import": "./dist/adapters/vanilla/index.js"
+    },
+    "./nvs-generator": {
+      "import": "./dist/core/nvs-generator.js"
+    },
+    "./partition-table-generator": {
+      "import": "./dist/core/partition-table-generator.js"
+    }
   },
   "bin": {
     "esp-webflash-toolkit": "./bin/cli.js"

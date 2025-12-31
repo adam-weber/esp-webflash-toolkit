@@ -143,6 +143,7 @@
         .log-line.success { color: #34c759; }
         .log-line.error { color: #ff453a; }
         .log-line.warning { color: #ff9f0a; }
+        .log-line.debug { color: #86868b; }
 
         .config-section {
             margin-bottom: 24px;
@@ -167,12 +168,13 @@
             margin-bottom: 6px;
         }
 
-        .form-group input {
+        .form-group input, .form-group select {
             width: 100%;
             padding: 12px;
             border: 1px solid #d2d2d7;
             border-radius: 8px;
             font-size: 15px;
+            background: white;
         }
 
         .form-group input:focus {
@@ -192,7 +194,7 @@
             text-decoration: none;
         }
 
-        /* Setup mode (no params) */
+        /* Setup mode styles */
         .setup-card {
             background: white;
             border-radius: 16px;
@@ -200,24 +202,12 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
 
-        .setup-card h1 {
+        .setup-card h1, .setup-card .subtitle {
             text-align: center;
-            margin-bottom: 8px;
         }
 
         .setup-card .subtitle {
-            text-align: center;
             margin-bottom: 32px;
-        }
-
-        .setup-card .form-group input,
-        .setup-card .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #d2d2d7;
-            border-radius: 8px;
-            font-size: 15px;
-            background: white;
         }
 
         .generated-url {
@@ -232,11 +222,6 @@
         }
 
         .generated-url.visible { display: block; }
-
-        .copy-btn {
-            margin-top: 12px;
-            width: 100%;
-        }
 
         .or-divider {
             text-align: center;
@@ -312,11 +297,6 @@
             width: 16px;
             height: 16px;
             margin: 0;
-        }
-
-        .field-toggles .toggle input:checked + span,
-        .field-toggles .toggle:has(input:checked) {
-            background: #e3f0ff;
         }
 
         .repo-section {
@@ -455,7 +435,7 @@
             </div>
 
             <button class="btn btn-primary" id="connect-btn">Connect Device</button>
-            <button class="btn btn-primary" id="flash-btn" disabled>Flash Firmware</button>
+            <button class="btn btn-primary" id="flash-btn" disabled style="display: none;">Flash Firmware</button>
 
             <div class="log" id="log"></div>
 
@@ -465,7 +445,13 @@
         </div>
     </div>
 
-    <script type="module">
+    <!-- Load the library bundle -->
+    <script src="../../dist/esp-webflash-toolkit.min.js"></script>
+
+    <script>
+        // Get library from global
+        const { ESPFlasher, expandFieldPresets, FieldPresets } = ESPWebFlash;
+
         // Browser check
         if (!navigator.serial) {
             document.getElementById('browser-warning').style.display = 'block';
@@ -478,11 +464,8 @@
             bin: params.get('bin') || params.get('b'),
             chip: params.get('chip') || params.get('c') || 'esp32',
             repo: params.get('repo') || params.get('r'),
-            // Config fields (comma-separated: wifi,mqtt,etc)
             fields: params.get('fields') || params.get('f'),
-            // NVS offset (default 0x9000)
             nvsOffset: parseInt(params.get('nvs') || '0x9000', 16),
-            // Flash offset for main firmware
             offset: parseInt(params.get('offset') || params.get('o') || '0x10000', 16)
         };
 
@@ -490,9 +473,7 @@
         const flashView = document.getElementById('flash-view');
 
         // State
-        let transport = null;
-        let espStub = null;
-        let isConnected = false;
+        let flasher = null;
 
         // Logging
         const logEl = document.getElementById('log');
@@ -505,16 +486,15 @@
             logEl.scrollTop = logEl.scrollHeight;
         }
 
-        function updateStatus(status, text, subtext) {
+        function updateStatus(state, text, subtext) {
             const box = document.getElementById('status-box');
-            box.className = `status-box ${status}`;
+            box.className = `status-box ${state}`;
             document.getElementById('status-text').textContent = text;
-            document.getElementById('status-subtext').textContent = subtext;
+            document.getElementById('status-subtext').textContent = subtext || '';
         }
 
-        // Check if we have enough params to show flash view
+        // Initialize
         async function init() {
-            // Try to load from repo first
             if (config.repo && !config.bin) {
                 await loadFromRepo(config.repo);
                 return;
@@ -529,20 +509,15 @@
 
         async function loadFromRepo(repo) {
             try {
-                // Try to fetch flash-config.json from the repo
                 const url = `https://raw.githubusercontent.com/${repo}/main/flash-config.json`;
-                const res = await fetch(url);
+                let res = await fetch(url);
                 if (!res.ok) {
-                    // Try master branch
                     const url2 = `https://raw.githubusercontent.com/${repo}/master/flash-config.json`;
-                    const res2 = await fetch(url2);
-                    if (!res2.ok) throw new Error('flash-config.json not found');
-                    const json = await res2.json();
-                    applyConfig(json, repo);
-                } else {
-                    const json = await res.json();
-                    applyConfig(json, repo);
+                    res = await fetch(url2);
+                    if (!res.ok) throw new Error('flash-config.json not found');
                 }
+                const json = await res.json();
+                applyConfig(json, repo);
             } catch (e) {
                 console.error('Failed to load from repo:', e);
                 showSetupView();
@@ -556,9 +531,8 @@
             config.chip = json.chip || 'esp32';
             config.offset = parseInt(json.offset || '0x10000', 16);
             config.nvsOffset = parseInt(json.nvsOffset || '0x9000', 16);
-            config.fields = json.fields; // Array of field configs
+            config.fields = json.fields;
 
-            // Resolve relative URLs to GitHub releases
             if (config.bin && !config.bin.startsWith('http')) {
                 config.bin = `https://github.com/${repo}/releases/latest/download/${config.bin}`;
             }
@@ -570,14 +544,12 @@
             setupView.style.display = 'block';
             flashView.style.display = 'none';
 
-            // Show/hide custom chip input
             const chipSelect = document.getElementById('setup-chip');
             const chipCustom = document.getElementById('setup-chip-custom');
             chipSelect.onchange = () => {
                 chipCustom.style.display = chipSelect.value === 'custom' ? 'block' : 'none';
             };
 
-            // Generate URL button
             document.getElementById('generate-url-btn').onclick = () => {
                 const name = document.getElementById('setup-name').value.trim();
                 const bin = document.getElementById('setup-bin').value.trim();
@@ -595,7 +567,6 @@
                     return;
                 }
 
-                // Collect selected fields
                 const fieldIds = ['wifi', 'mqtt', 'device_name', 'api_key', 'server_url'];
                 const selectedFields = fieldIds.filter(id =>
                     document.getElementById(`field-${id}`).checked
@@ -609,7 +580,6 @@
                     url.searchParams.set('fields', selectedFields.join(','));
                 }
 
-                // Advanced options (only include if non-default)
                 const offset = document.getElementById('setup-offset').value.trim();
                 const nvs = document.getElementById('setup-nvs').value.trim();
                 if (offset && offset !== '0x10000') {
@@ -625,7 +595,6 @@
                 document.getElementById('url-buttons').style.display = 'flex';
             };
 
-            // Copy URL button
             document.getElementById('copy-url-btn').onclick = () => {
                 const url = document.getElementById('generated-url').textContent;
                 navigator.clipboard.writeText(url);
@@ -635,13 +604,11 @@
                 }, 2000);
             };
 
-            // Test URL button
             document.getElementById('test-url-btn').onclick = () => {
                 const url = document.getElementById('generated-url').textContent;
                 window.open(url, '_blank');
             };
 
-            // Load from repo button
             document.getElementById('load-repo-btn').onclick = async () => {
                 const repo = document.getElementById('setup-repo').value.trim();
                 if (!repo) {
@@ -660,21 +627,7 @@
             document.getElementById('project-subtitle').innerHTML =
                 `Flash firmware to your device <span class="chip-badge">${config.chip.toUpperCase()}</span>`;
 
-            // Render config fields if specified
-            renderConfigFields();
-
-            // Connect button
-            document.getElementById('connect-btn').onclick = connect;
-
-            // Flash button
-            document.getElementById('flash-btn').onclick = flash;
-        }
-
-        function renderConfigFields() {
-            const container = document.getElementById('config-fields');
-            container.innerHTML = '';
-
-            // Parse fields param: wifi,mqtt or use array from flash-config.json
+            // Parse fields and create flasher
             let fields = [];
             if (typeof config.fields === 'string') {
                 fields = config.fields.split(',').map(f => f.trim());
@@ -682,259 +635,132 @@
                 fields = config.fields;
             }
 
-            if (fields.length === 0) return;
+            // Create the flasher instance
+            flasher = new ESPFlasher({
+                chip: config.chip,
+                firmwareUrl: config.bin,
+                firmwareOffset: config.offset,
+                nvsOffset: config.nvsOffset,
+                fields: fields
+            });
 
-            // Predefined field templates
-            const templates = {
-                wifi: [
-                    { key: 'wifi_ssid', label: 'WiFi SSID', type: 'text', placeholder: 'MyNetwork' },
-                    { key: 'wifi_pass', label: 'WiFi Password', type: 'password' }
-                ],
-                mqtt: [
-                    { key: 'mqtt_host', label: 'MQTT Host', type: 'text', placeholder: 'mqtt.example.com' },
-                    { key: 'mqtt_user', label: 'MQTT Username', type: 'text' },
-                    { key: 'mqtt_pass', label: 'MQTT Password', type: 'password' }
-                ],
-                device_name: [
-                    { key: 'device_name', label: 'Device Name', type: 'text', placeholder: 'my-device-001' }
-                ],
-                api_key: [
-                    { key: 'api_key', label: 'API Key', type: 'password' }
-                ],
-                server_url: [
-                    { key: 'server_url', label: 'Server URL', type: 'text', placeholder: 'https://api.example.com' }
-                ]
+            // Bind events
+            flasher.addEventListener('status', (e) => {
+                const { state, message } = e.detail;
+                const stateMap = {
+                    connecting: '',
+                    connected: 'connected',
+                    downloading: 'flashing',
+                    generating: 'flashing',
+                    flashing: 'flashing',
+                    complete: 'success'
+                };
+                updateStatus(stateMap[state] || state, message);
+            });
+
+            flasher.addEventListener('progress', (e) => {
+                const { percent } = e.detail;
+                document.getElementById('progress-bar').style.display = 'block';
+                document.getElementById('progress-fill').style.width = `${percent}%`;
+                updateStatus('flashing', 'Flashing...', `${Math.round(percent)}%`);
+            });
+
+            flasher.addEventListener('log', (e) => {
+                const { message, level } = e.detail;
+                log(message, level);
+            });
+
+            flasher.addEventListener('connected', (e) => {
+                const { chipType } = e.detail;
+                updateStatus('connected', 'Connected', chipType);
+                document.getElementById('flash-btn').disabled = false;
+                document.getElementById('flash-btn').style.display = 'block';
+                document.getElementById('connect-btn').style.display = 'none';
+            });
+
+            flasher.addEventListener('error', (e) => {
+                updateStatus('error', 'Error', e.detail.message);
+            });
+
+            flasher.addEventListener('complete', () => {
+                updateStatus('success', 'Flash Complete!', 'You can disconnect the device');
+            });
+
+            flasher.addEventListener('chip-mismatch', (e) => {
+                const { expected, detected, proceed, cancel } = e.detail;
+                if (confirm(`Chip mismatch: expected ${expected}, found ${detected}. Continue anyway?`)) {
+                    proceed();
+                } else {
+                    cancel();
+                }
+            });
+
+            // Render config fields
+            renderConfigFields(fields);
+
+            // Button handlers
+            document.getElementById('connect-btn').onclick = async () => {
+                document.getElementById('connect-btn').disabled = true;
+                document.getElementById('connect-btn').textContent = 'Connecting...';
+                try {
+                    await flasher.connect();
+                } catch (e) {
+                    document.getElementById('connect-btn').disabled = false;
+                    document.getElementById('connect-btn').textContent = 'Connect Device';
+                }
             };
+
+            document.getElementById('flash-btn').onclick = async () => {
+                document.getElementById('flash-btn').disabled = true;
+                try {
+                    // Collect config values from form
+                    const configValues = {};
+                    document.querySelectorAll('[data-nvs-key]').forEach(input => {
+                        const key = input.dataset.nvsKey;
+                        const value = input.value.trim();
+                        if (value) configValues[key] = value;
+                    });
+                    flasher.setConfig(configValues);
+
+                    await flasher.flash();
+                } catch (e) {
+                    document.getElementById('flash-btn').disabled = false;
+                }
+            };
+        }
+
+        function renderConfigFields(fields) {
+            const container = document.getElementById('config-fields');
+            container.innerHTML = '';
+
+            if (!fields || fields.length === 0) return;
+
+            // Expand field presets
+            const expandedFields = expandFieldPresets(fields);
+
+            if (expandedFields.length === 0) return;
 
             const section = document.createElement('div');
             section.className = 'config-section';
             section.innerHTML = '<h3>Configuration</h3>';
 
-            fields.forEach(field => {
-                if (typeof field === 'string' && templates[field]) {
-                    // Use template
-                    templates[field].forEach(f => {
-                        section.appendChild(createFieldInput(f));
-                    });
-                } else if (typeof field === 'object') {
-                    // Custom field from flash-config.json
-                    section.appendChild(createFieldInput(field));
-                }
+            expandedFields.forEach(field => {
+                const group = document.createElement('div');
+                group.className = 'form-group';
+                group.innerHTML = `
+                    <label>${field.label || field.key}</label>
+                    <input type="${field.type || 'text'}"
+                           id="field-${field.key}"
+                           data-nvs-key="${field.key}"
+                           placeholder="${field.placeholder || ''}">
+                `;
+                section.appendChild(group);
             });
 
             container.appendChild(section);
         }
 
-        function createFieldInput(field) {
-            const group = document.createElement('div');
-            group.className = 'form-group';
-            group.innerHTML = `
-                <label>${field.label || field.key}</label>
-                <input type="${field.type || 'text'}"
-                       id="field-${field.key}"
-                       data-nvs-key="${field.key}"
-                       placeholder="${field.placeholder || ''}">
-            `;
-            return group;
-        }
-
-        function getConfigValues() {
-            const values = {};
-            document.querySelectorAll('[data-nvs-key]').forEach(input => {
-                const key = input.dataset.nvsKey;
-                const value = input.value.trim();
-                if (value) values[key] = value;
-            });
-            return values;
-        }
-
-        async function connect() {
-            try {
-                updateStatus('', 'Connecting...', 'Select your device');
-                log('Requesting serial port...');
-
-                const port = await navigator.serial.requestPort();
-                log('Port selected, opening connection...');
-
-                const { Transport, ESPLoader } = await import('https://unpkg.com/esptool-js@0.4.5/bundle.js');
-
-                transport = new Transport(port, true);
-                espStub = new ESPLoader({
-                    transport,
-                    baudrate: 115200,
-                    terminal: {
-                        clean: () => {},
-                        writeLine: (data) => log(data),
-                        write: (data) => log(data)
-                    }
-                });
-
-                const chip = await espStub.main();
-                log(`Connected: ${chip}`, 'success');
-
-                isConnected = true;
-                updateStatus('connected', 'Connected', chip);
-                document.getElementById('flash-btn').disabled = false;
-                document.getElementById('connect-btn').textContent = 'Reconnect';
-
-            } catch (e) {
-                log(`Connection failed: ${e.message}`, 'error');
-                updateStatus('error', 'Connection Failed', e.message);
-            }
-        }
-
-        async function flash() {
-            if (!isConnected || !espStub) {
-                alert('Please connect a device first');
-                return;
-            }
-
-            try {
-                document.getElementById('flash-btn').disabled = true;
-                updateStatus('flashing', 'Downloading...', 'Fetching firmware');
-
-                // Download firmware
-                log(`Downloading firmware from ${config.bin}...`);
-                const response = await fetch(config.bin);
-                if (!response.ok) throw new Error(`Failed to download: ${response.status}`);
-
-                const firmwareData = await response.arrayBuffer();
-                log(`Downloaded ${(firmwareData.byteLength / 1024).toFixed(1)} KB`, 'success');
-
-                // Prepare flash files
-                const flashFiles = [];
-
-                // Check if we have config values to flash as NVS
-                const configValues = getConfigValues();
-                if (Object.keys(configValues).length > 0) {
-                    log('Generating NVS partition...');
-                    const nvsData = generateNVS(configValues);
-                    flashFiles.push({
-                        address: config.nvsOffset,
-                        data: nvsData
-                    });
-                    log(`NVS partition: ${nvsData.byteLength} bytes at 0x${config.nvsOffset.toString(16)}`, 'info');
-                }
-
-                // Add main firmware
-                flashFiles.push({
-                    address: config.offset,
-                    data: new Uint8Array(firmwareData)
-                });
-                log(`Firmware: ${firmwareData.byteLength} bytes at 0x${config.offset.toString(16)}`, 'info');
-
-                // Flash each file
-                updateStatus('flashing', 'Flashing...', '0%');
-                document.getElementById('progress-bar').style.display = 'block';
-
-                for (const file of flashFiles) {
-                    log(`Flashing ${file.data.byteLength} bytes to 0x${file.address.toString(16)}...`);
-
-                    await espStub.flashData(
-                        file.data,
-                        file.address,
-                        (pct) => {
-                            document.getElementById('progress-fill').style.width = `${pct}%`;
-                            updateStatus('flashing', 'Flashing...', `${Math.round(pct)}%`);
-                        }
-                    );
-                }
-
-                log('Flash complete!', 'success');
-                updateStatus('success', 'Flash Complete!', 'You can disconnect the device');
-
-                // Reset device
-                log('Resetting device...');
-                await espStub.hardReset();
-
-            } catch (e) {
-                log(`Flash failed: ${e.message}`, 'error');
-                updateStatus('error', 'Flash Failed', e.message);
-            } finally {
-                document.getElementById('flash-btn').disabled = false;
-            }
-        }
-
-        // Simple NVS generator (inline for standalone use)
-        function generateNVS(data, partitionSize = 0x6000) {
-            const PAGE_SIZE = 4096;
-            const ENTRY_SIZE = 32;
-            const binary = new Uint8Array(partitionSize);
-            binary.fill(0xFF);
-
-            let pageIndex = 0;
-            let entryIndex = 1;
-            const namespace = 'config';
-            const namespaceIndex = 1;
-
-            // Write namespace entry
-            writeEntry(binary, pageIndex, entryIndex++, {
-                namespace: 0,
-                type: 0x01,
-                span: 1,
-                key: namespace,
-                data: new Uint8Array([namespaceIndex])
-            });
-
-            // Write each key-value
-            for (const [key, value] of Object.entries(data)) {
-                const entry = createEntry(namespaceIndex, key, value);
-                writeEntry(binary, pageIndex, entryIndex, entry);
-                entryIndex += entry.span;
-            }
-
-            // Finalize page
-            const view = new DataView(binary.buffer);
-            view.setUint32(0, 0xFFFFFFFE, true); // PAGE_STATE_ACTIVE
-            view.setUint32(4, 0, true); // Sequence number
-
-            return binary;
-
-            function createEntry(nsIndex, key, value) {
-                const encoder = new TextEncoder();
-                const strBytes = encoder.encode(value);
-                const data = new Uint8Array(strBytes.length + 1);
-                data.set(strBytes);
-                data[strBytes.length] = 0;
-
-                return {
-                    namespace: nsIndex,
-                    type: 0x21, // TYPE_STR
-                    span: 1 + Math.ceil(data.length / ENTRY_SIZE),
-                    key: key,
-                    data: data
-                };
-            }
-
-            function writeEntry(binary, pageIndex, entryIndex, entry) {
-                const offset = pageIndex * PAGE_SIZE + 32 + entryIndex * ENTRY_SIZE;
-
-                binary[offset] = entry.namespace;
-                binary[offset + 1] = entry.type;
-                binary[offset + 2] = entry.span;
-                binary[offset + 3] = 0xFF;
-
-                const keyBytes = new TextEncoder().encode(entry.key.substring(0, 15));
-                binary.set(keyBytes, offset + 8);
-
-                if (entry.type === 0x21) {
-                    const view = new DataView(binary.buffer);
-                    view.setUint16(offset + 24, entry.data.length, true);
-
-                    let dataOffset = 0;
-                    for (let i = 1; i < entry.span; i++) {
-                        const nextOffset = offset + i * ENTRY_SIZE;
-                        const chunk = entry.data.slice(dataOffset, dataOffset + ENTRY_SIZE);
-                        binary.set(chunk, nextOffset);
-                        dataOffset += ENTRY_SIZE;
-                    }
-                } else {
-                    binary.set(entry.data, offset + 24);
-                }
-            }
-        }
-
-        // Initialize
+        // Start
         init();
     </script>
 </body>

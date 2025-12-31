@@ -422,7 +422,10 @@ function parseNVSConfig(binary, namespace = 'config') {
     return parsed[namespace] || {};
 }
 
-// Expose to browser global scope
+// ESM exports
+export { NVSGenerator, generateNVSFromConfig, parseNVSConfig };
+
+// Expose to browser global scope for non-module usage
 if (typeof window !== 'undefined') {
     window.NVSGenerator = NVSGenerator;
     window.generateNVSFromConfig = generateNVSFromConfig;
