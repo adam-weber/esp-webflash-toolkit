@@ -125,9 +125,9 @@ var ESPWebFlash = (() => {
           this.emit("log", { message: `MAC Address: ${macAddr}`, level: "info" });
         }
         if (expectedChip && chipType && !options.skipChipCheck) {
-          const expected = expectedChip.toUpperCase();
-          const detected = chipType.toUpperCase();
-          const isMatch = detected.includes(expected.replace("ESP32-", ""));
+          const expected = expectedChip.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
+          const detected = chipType.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
+          const isMatch = detected.includes(expected) || expected.includes(detected.split(" ")[0]);
           if (!isMatch) {
             const shouldProceed = await this.handleChipMismatch(expected, detected);
             if (!shouldProceed) {

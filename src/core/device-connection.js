@@ -117,9 +117,10 @@ export class DeviceConnection extends EventTarget {
 
             // Chip validation
             if (expectedChip && chipType && !options.skipChipCheck) {
-                const expected = expectedChip.toUpperCase();
-                const detected = chipType.toUpperCase();
-                const isMatch = detected.includes(expected.replace('ESP32-', ''));
+                const expected = expectedChip.toUpperCase().replace('ESP32-', 'ESP32').replace('ESP32', '');
+                const detected = chipType.toUpperCase().replace('ESP32-', 'ESP32').replace('ESP32', '');
+                // Compare normalized forms: "esp32c3" and "ESP32-C3" both become "C3"
+                const isMatch = detected.includes(expected) || expected.includes(detected.split(' ')[0]);
 
                 if (!isMatch) {
                     // Emit chip mismatch event and wait for resolution
