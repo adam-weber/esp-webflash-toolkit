@@ -66,11 +66,47 @@ Push to GitHub, enable Pages, and your users can flash from `https://you.github.
 
 ---
 
-### Option 3: Library for Custom Integration
+### Option 3: Library Integration
 
 ```bash
 npm install esp-webflash-toolkit
 ```
+
+**Simple API** — flash a device in one call:
+
+```javascript
+import { flashDevice } from 'esp-webflash-toolkit';
+
+await flashDevice({
+  firmware: 'https://example.com/firmware.bin',
+  config: {
+    wifi_ssid: 'MyNetwork',
+    wifi_pass: 'MyPassword'
+  },
+  onProgress: (percent) => console.log(`${percent}%`)
+});
+```
+
+**Advanced API** — full control for custom UIs:
+
+```javascript
+import { ESPFlasher } from 'esp-webflash-toolkit';
+
+const flasher = new ESPFlasher({
+  chip: 'esp32',
+  firmwareUrl: 'https://example.com/firmware.bin',
+  fields: ['wifi']
+});
+
+flasher.addEventListener('progress', e => updateProgressBar(e.detail.percent));
+flasher.addEventListener('log', e => appendToConsole(e.detail.message));
+
+await flasher.connect();
+flasher.setConfig({ wifi_ssid: 'MyNetwork', wifi_pass: 'secret' });
+await flasher.flash();
+```
+
+**NVS Generation** — generate partition binaries directly:
 
 ```javascript
 import { NVSGenerator } from 'esp-webflash-toolkit/nvs-generator';
@@ -103,7 +139,8 @@ You've built an ESP32 project. Now you need users to flash it.
 
 - **Browser-based flashing** via Web Serial API
 - **NVS partition generation** — WiFi credentials, device config, custom settings
-- **Partition table generation** — custom flash layouts
+- **Simple and advanced APIs** — one-liner or full event-driven control
+- **Field presets** — `'wifi'`, `'mqtt'`, `'device_name'` expand to common config patterns
 - **Works with:** ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP8266
 
 ---
@@ -180,26 +217,47 @@ Safari and Firefox don't support Web Serial.
 
 ---
 
-## Advanced: Module Reference
+## API Reference
 
-For custom integrations:
+### flashDevice(options)
 
-| Module | Purpose |
-|--------|---------|
-| `nvs-generator` | Generate NVS partition binaries |
-| `partition-table-generator` | Generate custom partition tables |
-| `device-connection` | Web Serial connection handling |
-| `firmware-flasher` | Flash operations |
-| `config-manager` | Form/config state management |
+Flash a device in one call.
 
 ```javascript
-import { PartitionTableGenerator } from 'esp-webflash-toolkit/partition-table-generator';
+await flashDevice({
+  firmware: 'https://...',      // Required: firmware URL
+  config: { key: 'value' },     // Optional: NVS config
+  chip: 'esp32',                // Optional: expected chip type
+  onProgress: (percent) => {},  // Optional: progress callback
+  onLog: (msg, level) => {},    // Optional: log callback
+  firmwareOffset: 0x10000,      // Optional: firmware offset
+  nvsOffset: 0x9000             // Optional: NVS offset
+});
+```
 
-const gen = new PartitionTableGenerator();
-const table = gen.generate([
-  { name: 'nvs', type: 'data', subtype: 'nvs', offset: 0x9000, size: 0x6000 },
-  { name: 'app', type: 'app', subtype: 'factory', offset: 0x10000, size: 0x100000 }
-]);
+### ESPFlasher
+
+Event-driven flasher for custom UIs.
+
+```javascript
+const flasher = new ESPFlasher(options);
+
+// Events: 'progress', 'log', 'status', 'connected', 'disconnected', 'error', 'complete'
+flasher.addEventListener('progress', e => console.log(e.detail.percent));
+
+await flasher.connect();
+flasher.setConfig({ wifi_ssid: 'test' });
+await flasher.flash();
+flasher.dispose();
+```
+
+### NVSGenerator
+
+Generate NVS partition binaries.
+
+```javascript
+const nvs = new NVSGenerator();
+const binary = nvs.generate({ namespace: { key: 'value' } }, 0x6000);
 ```
 
 ---

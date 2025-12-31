@@ -320,8 +320,8 @@ Hosted Flasher (zero setup):
 Library Usage:
   npm install esp-webflash-toolkit
 
+  import { ESPFlasher } from 'esp-webflash-toolkit';
   import { NVSGenerator } from 'esp-webflash-toolkit/nvs-generator';
-  import { PartitionTableGenerator } from 'esp-webflash-toolkit/partition-table-generator';
 `);
 }
 

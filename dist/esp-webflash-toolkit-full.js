@@ -44,9 +44,9 @@ var ESPWebFlash = (() => {
     FlasherApp: () => FlasherApp,
     FlasherUI: () => FlasherUI,
     NVSGenerator: () => NVSGenerator,
-    PartitionTableGenerator: () => PartitionTableGenerator,
     createFlasher: () => createFlasher,
-    expandFieldPresets: () => expandFieldPresets
+    expandFieldPresets: () => expandFieldPresets,
+    flashDevice: () => flashDevice
   });
 
   // src/core/device-connection.js
@@ -671,1102 +671,275 @@ var ESPWebFlash = (() => {
   };
 
   // src/core/config-store.js
-  var ConfigStore = class extends EventTarget {
-    /**
-     * @param {Object} [initialConfig] - Initial config values
-     */
-    constructor(initialConfig = {}) {
-      super();
-      this.config = { ...initialConfig };
-      this.schema = null;
-      this._listeners = /* @__PURE__ */ new Map();
-    }
-    /**
-     * Emit a typed event
-     * @private
-     */
-    emit(type, detail) {
-      this.dispatchEvent(new CustomEvent(type, { detail }));
-    }
-    /**
-     * Set the config schema (field definitions)
-     * @param {Array<FieldDefinition>} fields - Field definitions
-     */
-    setSchema(fields) {
-      this.schema = fields;
-      fields.forEach((field) => {
-        if (field.default !== void 0 && this.config[field.key] === void 0) {
-          this.config[field.key] = field.default;
-        }
-      });
-      this.emit("schema-changed", { schema: this.schema });
-    }
-    /**
-     * Get schema
-     * @returns {Array<FieldDefinition>|null}
-     */
-    getSchema() {
-      return this.schema;
-    }
-    /**
-     * Set a config value
-     * @param {string} key - Config key
-     * @param {any} value - Config value
-     */
-    set(key, value) {
-      const oldValue = this.config[key];
-      this.config[key] = value;
-      this.emit("change", { key, value, oldValue });
-    }
-    /**
-     * Get a config value
-     * @param {string} key - Config key
-     * @returns {any}
-     */
-    get(key) {
-      return this.config[key];
-    }
-    /**
-     * Get all config values
-     * @returns {Object}
-     */
-    getAll() {
-      return { ...this.config };
-    }
-    /**
-     * Set multiple values at once
-     * @param {Object} values - Key-value pairs
-     */
-    setAll(values) {
-      Object.entries(values).forEach(([key, value]) => {
-        this.config[key] = value;
-      });
-      this.emit("change", { bulk: true, values });
-    }
-    /**
-     * Clear all config
-     */
-    clear() {
-      const oldConfig = { ...this.config };
-      this.config = {};
-      if (this.schema) {
-        this.schema.forEach((field) => {
-          if (field.default !== void 0) {
-            this.config[field.key] = field.default;
-          }
-        });
-      }
-      this.emit("clear", { oldConfig });
-    }
-    /**
-     * Check if config is valid (all required fields present, patterns match)
-     * @returns {ValidationResult}
-     */
-    validate() {
-      if (!this.schema) {
-        return { valid: true, missing: [], errors: {} };
-      }
-      const missing = [];
-      const errors = {};
-      for (const field of this.schema) {
-        const value = this.config[field.key];
-        const isEmpty = value === void 0 || value === null || value === "";
-        if (field.required && isEmpty) {
-          missing.push(field.key);
-          errors[field.key] = `${field.label || field.key} is required`;
-          continue;
-        }
-        if (isEmpty) continue;
-        if (field.pattern) {
-          const regex = new RegExp(field.pattern);
-          if (!regex.test(String(value))) {
-            errors[field.key] = `${field.label || field.key} format is invalid`;
-          }
-        }
-        if (field.type === "number") {
-          const num = Number(value);
-          if (isNaN(num)) {
-            errors[field.key] = `${field.label || field.key} must be a number`;
-          }
-        }
-      }
-      return {
-        valid: missing.length === 0 && Object.keys(errors).length === 0,
-        missing,
-        errors
-      };
-    }
-    /**
-     * Check if a specific key exists in the schema
-     * @param {string} key - Field key to check
-     * @returns {boolean}
-     */
-    hasField(key) {
-      if (!this.schema) return true;
-      return this.schema.some((field) => field.key === key);
-    }
-    /**
-     * Get field definition by key
-     * @param {string} key - Field key
-     * @returns {FieldDefinition|null}
-     */
-    getField(key) {
-      if (!this.schema) return null;
-      return this.schema.find((field) => field.key === key) || null;
-    }
-    /**
-     * Get config formatted for NVS generation
-     * Only includes non-empty values
-     * @returns {Object}
-     */
-    toNVS() {
-      const nvsData = {};
-      Object.entries(this.config).forEach(([key, value]) => {
-        if (value !== void 0 && value !== null && value !== "") {
-          nvsData[key] = String(value);
-        }
-      });
-      return nvsData;
-    }
-    /**
-     * Load config from serialized data (e.g., localStorage)
-     * @param {string|Object} data - JSON string or object
-     */
-    load(data) {
-      const parsed = typeof data === "string" ? JSON.parse(data) : data;
-      this.config = { ...parsed };
-      this.emit("load", { config: this.config });
-    }
-    /**
-     * Serialize config for storage
-     * @returns {string}
-     */
-    serialize() {
-      return JSON.stringify(this.config);
-    }
-  };
   var FieldPresets = {
     wifi: [
-      { key: "wifi_ssid", label: "WiFi SSID", type: "text", placeholder: "MyNetwork", required: true },
+      { key: "wifi_ssid", label: "WiFi SSID", type: "text", required: true },
       { key: "wifi_pass", label: "WiFi Password", type: "password", required: true }
     ],
     mqtt: [
-      { key: "mqtt_host", label: "MQTT Host", type: "text", placeholder: "mqtt.example.com" },
+      { key: "mqtt_host", label: "MQTT Host", type: "text" },
       { key: "mqtt_user", label: "MQTT Username", type: "text" },
       { key: "mqtt_pass", label: "MQTT Password", type: "password" }
     ],
     device_name: [
-      { key: "device_name", label: "Device Name", type: "text", placeholder: "my-device-001" }
-    ],
-    api_key: [
-      { key: "api_key", label: "API Key", type: "password" }
-    ],
-    server_url: [
-      { key: "server_url", label: "Server URL", type: "text", placeholder: "https://api.example.com" }
+      { key: "device_name", label: "Device Name", type: "text" }
     ]
   };
   function expandFieldPresets(fields) {
-    const expanded = [];
-    fields.forEach((field) => {
-      if (typeof field === "string" && FieldPresets[field]) {
-        expanded.push(...FieldPresets[field]);
-      } else if (typeof field === "object") {
-        expanded.push(field);
-      }
-    });
-    return expanded;
+    if (!fields) return [];
+    return fields.flatMap(
+      (f) => typeof f === "string" && FieldPresets[f] ? FieldPresets[f] : [f]
+    );
   }
   function flattenConfigSections(sections) {
-    if (!sections || !Array.isArray(sections)) {
-      return [];
-    }
-    const fields = [];
-    for (const section of sections) {
-      const sectionId = section.id || section.name || section.title || "default";
-      const sectionTitle = section.title || section.name || sectionId;
-      if (!section.fields || !Array.isArray(section.fields)) {
-        continue;
-      }
-      for (const field of section.fields) {
-        const key = field.nvsKey || field.key;
-        if (!key) continue;
-        fields.push({
-          key,
-          label: field.label || key,
-          type: field.type || "text",
-          placeholder: field.placeholder,
-          default: field.default,
-          required: field.required || false,
-          pattern: field.pattern,
-          help: field.help,
-          section: sectionId,
-          sectionTitle
-        });
-      }
-    }
-    return fields;
+    if (!sections) return [];
+    return sections.flatMap(
+      (section) => (section.fields || []).map((f) => ({
+        key: f.nvsKey || f.key || f.id,
+        label: f.label,
+        type: f.type || "text",
+        placeholder: f.placeholder,
+        required: f.required || false,
+        default: f.default,
+        pattern: f.pattern,
+        help: f.help,
+        section: section.title || section.id
+      }))
+    );
   }
   function groupFieldsBySection(fields) {
-    if (!fields || !Array.isArray(fields)) {
-      return [];
-    }
-    const sectionMap = /* @__PURE__ */ new Map();
+    if (!fields) return [];
+    const groups = /* @__PURE__ */ new Map();
     for (const field of fields) {
-      const sectionId = field.section || "default";
-      const sectionTitle = field.sectionTitle || sectionId;
-      if (!sectionMap.has(sectionId)) {
-        sectionMap.set(sectionId, {
-          id: sectionId,
-          title: sectionTitle,
-          fields: []
-        });
-      }
-      sectionMap.get(sectionId).fields.push(field);
+      const section = field.section || "default";
+      if (!groups.has(section)) groups.set(section, []);
+      groups.get(section).push(field);
     }
-    return Array.from(sectionMap.values());
+    return Array.from(groups.entries()).map(([title, fields2]) => ({ title, fields: fields2 }));
   }
-
-  // src/core/partition-table-generator.js
-  var PartitionTableGenerator = class _PartitionTableGenerator {
-    constructor() {
-      this.PARTITION_TABLE_SIZE = 4096;
-      this.MAX_PARTITION_LENGTH = 3072;
-      this.ENTRY_SIZE = 32;
-      this.MAGIC_BYTES = 43600;
-      this.MD5_PARTITION_BEGIN = [235, 235];
-      this.TYPE_APP = 0;
-      this.TYPE_DATA = 1;
-      this.SUBTYPE_APP_FACTORY = 0;
-      this.SUBTYPE_APP_OTA_MIN = 16;
-      this.SUBTYPE_APP_OTA_MAX = 31;
-      this.SUBTYPE_APP_TEST = 32;
-      this.SUBTYPE_DATA_OTA = 0;
-      this.SUBTYPE_DATA_RF = 1;
-      this.SUBTYPE_DATA_WIFI = 2;
-      this.SUBTYPE_DATA_NVS = 2;
-      this.SUBTYPE_DATA_COREDUMP = 3;
-      this.SUBTYPE_DATA_NVS_KEYS = 4;
-      this.SUBTYPE_DATA_EFUSE_EM = 5;
-      this.SUBTYPE_DATA_ESPHTTPD = 128;
-      this.SUBTYPE_DATA_FAT = 129;
-      this.SUBTYPE_DATA_SPIFFS = 130;
-      this.SUBTYPE_DATA_LITTLEFS = 131;
-      this.FLAG_ENCRYPTED = 1 << 0;
-      this.FLAG_READONLY = 1 << 1;
-      this.PARTITION_ALIGNMENT = 4096;
+  var ConfigStore = class extends EventTarget {
+    constructor(initialConfig = {}) {
+      super();
+      this.data = { ...initialConfig };
+      this.schema = null;
     }
     /**
-     * Generate partition table binary from partition definitions
-     * @param {Array} partitions - Array of partition objects
-     * @returns {Uint8Array} - Binary data ready to flash
-     *
-     * Partition object format:
-     * {
-     *   name: string (max 16 chars),
-     *   type: number or string ('app', 'data'),
-     *   subtype: number or string,
-     *   offset: number (hex or decimal),
-     *   size: number (hex or decimal),
-     *   flags: {encrypted: boolean, readonly: boolean}
-     * }
+     * Set field schema
+     * @param {Field[]} fields
      */
-    generate(partitions) {
-      const binary = new Uint8Array(this.PARTITION_TABLE_SIZE);
-      binary.fill(255);
-      let offset = 0;
-      for (let i = 0; i < partitions.length; i++) {
-        const partition = this.normalizePartition(partitions[i]);
-        this.validatePartition(partition, i);
-        this.writeEntry(binary, offset, partition);
-        offset += this.ENTRY_SIZE;
-        if (offset >= this.MAX_PARTITION_LENGTH) {
-          throw new Error("Too many partition entries (max 95)");
+    setSchema(fields) {
+      this.schema = fields;
+      for (const f of fields) {
+        if (f.default !== void 0 && this.data[f.key] === void 0) {
+          this.data[f.key] = f.default;
         }
       }
-      const tableData = binary.slice(0, offset);
-      const md5sum = this.calculateMD5(tableData);
-      this.writeMD5Entry(binary, offset, md5sum);
-      return binary;
+      this.dispatchEvent(new CustomEvent("schema-changed", { detail: { schema: fields } }));
+    }
+    /** @returns {Field[]|null} */
+    getSchema() {
+      return this.schema;
+    }
+    /** Set a value */
+    set(key, value) {
+      this.data[key] = value;
+      this.dispatchEvent(new CustomEvent("change", { detail: { key, value } }));
+    }
+    /** Get a value */
+    get(key) {
+      return this.data[key];
+    }
+    /** Get all values */
+    getAll() {
+      return { ...this.data };
+    }
+    /** Set multiple values */
+    setAll(values) {
+      Object.assign(this.data, values);
+      this.dispatchEvent(new CustomEvent("change", { detail: { values } }));
     }
     /**
-     * Normalize partition object to standard format
+     * Validate required fields
+     * @returns {{valid: boolean, missing: string[]}}
      */
-    normalizePartition(partition) {
-      const normalized = { ...partition };
-      if (typeof normalized.type === "string") {
-        const typeMap = { "app": this.TYPE_APP, "data": this.TYPE_DATA };
-        normalized.type = typeMap[normalized.type.toLowerCase()];
-        if (normalized.type === void 0) {
-          throw new Error(`Unknown partition type: ${partition.type}`);
+    validate() {
+      if (!this.schema) return { valid: true, missing: [] };
+      const missing = this.schema.filter((f) => f.required && !this.data[f.key]).map((f) => f.key);
+      return { valid: missing.length === 0, missing };
+    }
+    /**
+     * Get data formatted for NVS (non-empty string values only)
+     * @returns {Object<string, string>}
+     */
+    toNVS() {
+      const result = {};
+      for (const [k, v] of Object.entries(this.data)) {
+        if (v !== void 0 && v !== null && v !== "") {
+          result[k] = String(v);
         }
       }
-      if (typeof normalized.subtype === "string") {
-        normalized.subtype = this.parseSubtype(normalized.subtype, normalized.type);
-      }
-      if (typeof normalized.offset === "string") {
-        normalized.offset = parseInt(normalized.offset, 16);
-      }
-      if (typeof normalized.size === "string") {
-        normalized.size = parseInt(normalized.size, 16);
-      }
-      if (!normalized.flags) {
-        normalized.flags = 0;
-      } else if (typeof normalized.flags === "object") {
-        let flagBits = 0;
-        if (normalized.flags.encrypted) flagBits |= this.FLAG_ENCRYPTED;
-        if (normalized.flags.readonly) flagBits |= this.FLAG_READONLY;
-        normalized.flags = flagBits;
-      }
-      return normalized;
+      return result;
     }
-    /**
-     * Parse subtype string to number based on partition type
-     */
-    parseSubtype(subtypeStr, type) {
-      const subtypeLower = subtypeStr.toLowerCase();
-      if (type === this.TYPE_APP) {
-        const appSubtypes = {
-          "factory": this.SUBTYPE_APP_FACTORY,
-          "test": this.SUBTYPE_APP_TEST
-        };
-        if (subtypeLower.startsWith("ota_")) {
-          const otaNum = parseInt(subtypeLower.substring(4));
-          if (otaNum >= 0 && otaNum <= 15) {
-            return this.SUBTYPE_APP_OTA_MIN + otaNum;
-          }
-        }
-        return appSubtypes[subtypeLower];
-      } else if (type === this.TYPE_DATA) {
-        const dataSubtypes = {
-          "ota": this.SUBTYPE_DATA_OTA,
-          "rf": this.SUBTYPE_DATA_RF,
-          "wifi": this.SUBTYPE_DATA_WIFI,
-          "nvs": this.SUBTYPE_DATA_NVS,
-          "coredump": this.SUBTYPE_DATA_COREDUMP,
-          "nvs_keys": this.SUBTYPE_DATA_NVS_KEYS,
-          "efuse_em": this.SUBTYPE_DATA_EFUSE_EM,
-          "esphttpd": this.SUBTYPE_DATA_ESPHTTPD,
-          "fat": this.SUBTYPE_DATA_FAT,
-          "spiffs": this.SUBTYPE_DATA_SPIFFS,
-          "littlefs": this.SUBTYPE_DATA_LITTLEFS
-        };
-        return dataSubtypes[subtypeLower];
-      }
-      throw new Error(`Unknown subtype: ${subtypeStr}`);
+    /** Serialize for storage */
+    serialize() {
+      return JSON.stringify(this.data);
     }
-    /**
-     * Validate partition entry
-     */
-    validatePartition(partition, index) {
-      if (!partition.name || partition.name.length === 0) {
-        throw new Error(`Partition ${index}: name is required`);
-      }
-      if (partition.name.length > 16) {
-        throw new Error(`Partition ${index}: name too long (max 16 chars): ${partition.name}`);
-      }
-      if (partition.type === void 0) {
-        throw new Error(`Partition ${index}: type is required`);
-      }
-      if (partition.subtype === void 0) {
-        throw new Error(`Partition ${index}: subtype is required`);
-      }
-      if (partition.offset % this.PARTITION_ALIGNMENT !== 0) {
-        throw new Error(
-          `Partition ${index} (${partition.name}): offset 0x${partition.offset.toString(16)} is not aligned to 0x${this.PARTITION_ALIGNMENT.toString(16)} bytes`
-        );
-      }
-      if (!partition.size || partition.size <= 0) {
-        throw new Error(`Partition ${index} (${partition.name}): size must be positive`);
-      }
-    }
-    /**
-     * Validate entire partition table for overlaps and gaps
-     */
-    validateTable(partitions) {
-      const errors = [];
-      const warnings = [];
-      const sorted = [...partitions].sort((a, b) => a.offset - b.offset);
-      for (let i = 0; i < sorted.length - 1; i++) {
-        const current = sorted[i];
-        const next = sorted[i + 1];
-        const currentEnd = current.offset + current.size;
-        if (currentEnd > next.offset) {
-          errors.push(
-            `Partition '${current.name}' (ends at 0x${currentEnd.toString(16)}) overlaps with '${next.name}' (starts at 0x${next.offset.toString(16)})`
-          );
-        } else if (currentEnd < next.offset) {
-          const gap = next.offset - currentEnd;
-          warnings.push(
-            `Gap of ${gap} bytes (0x${gap.toString(16)}) between '${current.name}' and '${next.name}'`
-          );
-        }
-      }
-      return { errors, warnings };
-    }
-    /**
-     * Write a partition entry to the binary
-     */
-    writeEntry(binary, offset, partition) {
-      const view = new DataView(binary.buffer);
-      view.setUint16(offset + 0, this.MAGIC_BYTES, true);
-      view.setUint8(offset + 2, partition.type);
-      view.setUint8(offset + 3, partition.subtype);
-      view.setUint32(offset + 4, partition.offset, true);
-      view.setUint32(offset + 8, partition.size, true);
-      const nameBytes = new TextEncoder().encode(partition.name.substring(0, 15));
-      binary.set(nameBytes, offset + 12);
-      for (let i = nameBytes.length; i < 16; i++) {
-        binary[offset + 12 + i] = 0;
-      }
-      view.setUint32(offset + 28, partition.flags, true);
-    }
-    /**
-     * Write MD5 checksum entry
-     */
-    writeMD5Entry(binary, offset, md5Hash) {
-      const view = new DataView(binary.buffer);
-      view.setUint8(offset + 0, this.MD5_PARTITION_BEGIN[0]);
-      view.setUint8(offset + 1, this.MD5_PARTITION_BEGIN[1]);
-      for (let i = 2; i < 16; i++) {
-        binary[offset + i] = 255;
-      }
-      binary.set(md5Hash, offset + 16);
-    }
-    /**
-     * Parse partition table binary back to partition objects
-     * @param {Uint8Array} binary - Partition table binary data
-     * @returns {Object} - {partitions: Array, md5: Uint8Array}
-     */
-    parse(binary) {
-      const partitions = [];
-      const view = new DataView(binary.buffer, binary.byteOffset, binary.byteLength);
-      let offset = 0;
-      let md5 = null;
-      while (offset < this.MAX_PARTITION_LENGTH) {
-        const magic = view.getUint16(offset, true);
-        if (magic === 65535) {
-          break;
-        }
-        if (view.getUint8(offset) === this.MD5_PARTITION_BEGIN[0] && view.getUint8(offset + 1) === this.MD5_PARTITION_BEGIN[1]) {
-          md5 = new Uint8Array(binary.buffer, binary.byteOffset + offset + 16, 16);
-          break;
-        }
-        if (magic !== this.MAGIC_BYTES) {
-          console.warn(`Invalid magic bytes at offset ${offset}: 0x${magic.toString(16)}`);
-          break;
-        }
-        const type = view.getUint8(offset + 2);
-        const subtype = view.getUint8(offset + 3);
-        const partOffset = view.getUint32(offset + 4, true);
-        const size = view.getUint32(offset + 8, true);
-        const nameBytes = new Uint8Array(binary.buffer, binary.byteOffset + offset + 12, 16);
-        const nameEnd = nameBytes.indexOf(0);
-        const name = new TextDecoder().decode(nameBytes.slice(0, nameEnd > 0 ? nameEnd : 16));
-        const flags = view.getUint32(offset + 28, true);
-        partitions.push({
-          name,
-          type: this.getTypeName(type),
-          typeValue: type,
-          subtype: this.getSubtypeName(type, subtype),
-          subtypeValue: subtype,
-          offset: partOffset,
-          size,
-          flags: {
-            encrypted: !!(flags & this.FLAG_ENCRYPTED),
-            readonly: !!(flags & this.FLAG_READONLY)
-          }
-        });
-        offset += this.ENTRY_SIZE;
-      }
-      return { partitions, md5 };
-    }
-    /**
-     * Get human-readable type name
-     */
-    getTypeName(type) {
-      const types = {
-        [this.TYPE_APP]: "app",
-        [this.TYPE_DATA]: "data"
-      };
-      return types[type] || `0x${type.toString(16)}`;
-    }
-    /**
-     * Get human-readable subtype name
-     */
-    getSubtypeName(type, subtype) {
-      if (type === this.TYPE_APP) {
-        if (subtype === this.SUBTYPE_APP_FACTORY) return "factory";
-        if (subtype === this.SUBTYPE_APP_TEST) return "test";
-        if (subtype >= this.SUBTYPE_APP_OTA_MIN && subtype <= this.SUBTYPE_APP_OTA_MAX) {
-          return `ota_${subtype - this.SUBTYPE_APP_OTA_MIN}`;
-        }
-      } else if (type === this.TYPE_DATA) {
-        const subtypes = {
-          [this.SUBTYPE_DATA_OTA]: "ota",
-          [this.SUBTYPE_DATA_RF]: "rf",
-          [this.SUBTYPE_DATA_NVS]: "nvs",
-          [this.SUBTYPE_DATA_COREDUMP]: "coredump",
-          [this.SUBTYPE_DATA_NVS_KEYS]: "nvs_keys",
-          [this.SUBTYPE_DATA_EFUSE_EM]: "efuse_em",
-          [this.SUBTYPE_DATA_ESPHTTPD]: "esphttpd",
-          [this.SUBTYPE_DATA_FAT]: "fat",
-          [this.SUBTYPE_DATA_SPIFFS]: "spiffs",
-          [this.SUBTYPE_DATA_LITTLEFS]: "littlefs"
-        };
-        if (subtypes[subtype]) return subtypes[subtype];
-      }
-      return `0x${subtype.toString(16)}`;
-    }
-    /**
-     * Calculate MD5 hash
-     * @param {Uint8Array} data - Data to hash
-     * @returns {Uint8Array} - MD5 hash (16 bytes)
-     *
-     * Implementation verified against RFC 1321 test vectors:
-     * - MD5("") = d41d8cd98f00b204e9800998ecf8427e
-     * - MD5("a") = 0cc175b9c0f1b6a831c399e269772661
-     * - MD5("abc") = 900150983cd24fb0d6963f7d28e17f72
-     * - MD5("message digest") = f96b697d7cb7938d525a2f31aaf161d0
-     */
-    calculateMD5(data) {
-      return this._md5Core(data);
-    }
-    /**
-     * MD5 hash implementation following RFC 1321
-     * This is a complete, correct implementation suitable for partition table checksums.
-     *
-     * @private
-     * @param {Uint8Array} data - Input data
-     * @returns {Uint8Array} - 16-byte MD5 hash
-     */
-    _md5Core(data) {
-      function add32(a2, b2) {
-        return a2 + b2 & 4294967295;
-      }
-      function rotl(x, n) {
-        return (x << n | x >>> 32 - n) >>> 0;
-      }
-      function F(x, y, z) {
-        return x & y | ~x & z;
-      }
-      function G(x, y, z) {
-        return x & z | y & ~z;
-      }
-      function H(x, y, z) {
-        return x ^ y ^ z;
-      }
-      function I(x, y, z) {
-        return y ^ (x | ~z);
-      }
-      function step(fn, a2, b2, c2, d2, x, s, t) {
-        return add32(rotl(add32(add32(a2, fn(b2, c2, d2)), add32(x, t)), s), b2);
-      }
-      const msgLen = data.length;
-      const bitLen = msgLen * 8;
-      const padLen = msgLen % 64 < 56 ? 56 - msgLen % 64 : 120 - msgLen % 64;
-      const totalLen = msgLen + padLen + 8;
-      const padded = new Uint8Array(totalLen);
-      padded.set(data);
-      padded[msgLen] = 128;
-      const view = new DataView(padded.buffer);
-      view.setUint32(totalLen - 8, bitLen >>> 0, true);
-      view.setUint32(totalLen - 4, Math.floor(bitLen / 4294967296), true);
-      let a = 1732584193;
-      let b = 4023233417;
-      let c = 2562383102;
-      let d = 271733878;
-      for (let i = 0; i < totalLen; i += 64) {
-        const aa = a, bb = b, cc = c, dd = d;
-        const x = new Uint32Array(16);
-        for (let j = 0; j < 16; j++) {
-          x[j] = view.getUint32(i + j * 4, true);
-        }
-        a = step(F, a, b, c, d, x[0], 7, 3614090360);
-        d = step(F, d, a, b, c, x[1], 12, 3905402710);
-        c = step(F, c, d, a, b, x[2], 17, 606105819);
-        b = step(F, b, c, d, a, x[3], 22, 3250441966);
-        a = step(F, a, b, c, d, x[4], 7, 4118548399);
-        d = step(F, d, a, b, c, x[5], 12, 1200080426);
-        c = step(F, c, d, a, b, x[6], 17, 2821735955);
-        b = step(F, b, c, d, a, x[7], 22, 4249261313);
-        a = step(F, a, b, c, d, x[8], 7, 1770035416);
-        d = step(F, d, a, b, c, x[9], 12, 2336552879);
-        c = step(F, c, d, a, b, x[10], 17, 4294925233);
-        b = step(F, b, c, d, a, x[11], 22, 2304563134);
-        a = step(F, a, b, c, d, x[12], 7, 1804603682);
-        d = step(F, d, a, b, c, x[13], 12, 4254626195);
-        c = step(F, c, d, a, b, x[14], 17, 2792965006);
-        b = step(F, b, c, d, a, x[15], 22, 1236535329);
-        a = step(G, a, b, c, d, x[1], 5, 4129170786);
-        d = step(G, d, a, b, c, x[6], 9, 3225465664);
-        c = step(G, c, d, a, b, x[11], 14, 643717713);
-        b = step(G, b, c, d, a, x[0], 20, 3921069994);
-        a = step(G, a, b, c, d, x[5], 5, 3593408605);
-        d = step(G, d, a, b, c, x[10], 9, 38016083);
-        c = step(G, c, d, a, b, x[15], 14, 3634488961);
-        b = step(G, b, c, d, a, x[4], 20, 3889429448);
-        a = step(G, a, b, c, d, x[9], 5, 568446438);
-        d = step(G, d, a, b, c, x[14], 9, 3275163606);
-        c = step(G, c, d, a, b, x[3], 14, 4107603335);
-        b = step(G, b, c, d, a, x[8], 20, 1163531501);
-        a = step(G, a, b, c, d, x[13], 5, 2850285829);
-        d = step(G, d, a, b, c, x[2], 9, 4243563512);
-        c = step(G, c, d, a, b, x[7], 14, 1735328473);
-        b = step(G, b, c, d, a, x[12], 20, 2368359562);
-        a = step(H, a, b, c, d, x[5], 4, 4294588738);
-        d = step(H, d, a, b, c, x[8], 11, 2272392833);
-        c = step(H, c, d, a, b, x[11], 16, 1839030562);
-        b = step(H, b, c, d, a, x[14], 23, 4259657740);
-        a = step(H, a, b, c, d, x[1], 4, 2763975236);
-        d = step(H, d, a, b, c, x[4], 11, 1272893353);
-        c = step(H, c, d, a, b, x[7], 16, 4139469664);
-        b = step(H, b, c, d, a, x[10], 23, 3200236656);
-        a = step(H, a, b, c, d, x[13], 4, 681279174);
-        d = step(H, d, a, b, c, x[0], 11, 3936430074);
-        c = step(H, c, d, a, b, x[3], 16, 3572445317);
-        b = step(H, b, c, d, a, x[6], 23, 76029189);
-        a = step(H, a, b, c, d, x[9], 4, 3654602809);
-        d = step(H, d, a, b, c, x[12], 11, 3873151461);
-        c = step(H, c, d, a, b, x[15], 16, 530742520);
-        b = step(H, b, c, d, a, x[2], 23, 3299628645);
-        a = step(I, a, b, c, d, x[0], 6, 4096336452);
-        d = step(I, d, a, b, c, x[7], 10, 1126891415);
-        c = step(I, c, d, a, b, x[14], 15, 2878612391);
-        b = step(I, b, c, d, a, x[5], 21, 4237533241);
-        a = step(I, a, b, c, d, x[12], 6, 1700485571);
-        d = step(I, d, a, b, c, x[3], 10, 2399980690);
-        c = step(I, c, d, a, b, x[10], 15, 4293915773);
-        b = step(I, b, c, d, a, x[1], 21, 2240044497);
-        a = step(I, a, b, c, d, x[8], 6, 1873313359);
-        d = step(I, d, a, b, c, x[15], 10, 4264355552);
-        c = step(I, c, d, a, b, x[6], 15, 2734768916);
-        b = step(I, b, c, d, a, x[13], 21, 1309151649);
-        a = step(I, a, b, c, d, x[4], 6, 4149444226);
-        d = step(I, d, a, b, c, x[11], 10, 3174756917);
-        c = step(I, c, d, a, b, x[2], 15, 718787259);
-        b = step(I, b, c, d, a, x[9], 21, 3951481745);
-        a = add32(a, aa);
-        b = add32(b, bb);
-        c = add32(c, cc);
-        d = add32(d, dd);
-      }
-      const hash = new Uint8Array(16);
-      const hashView = new DataView(hash.buffer);
-      hashView.setUint32(0, a, true);
-      hashView.setUint32(4, b, true);
-      hashView.setUint32(8, c, true);
-      hashView.setUint32(12, d, true);
-      return hash;
-    }
-    /**
-     * Verify MD5 implementation against known test vectors
-     * Call this to validate the implementation is correct
-     * @returns {boolean} - True if all test vectors pass
-     */
-    static verifyMD5() {
-      const gen = new _PartitionTableGenerator();
-      const encoder = new TextEncoder();
-      const testVectors = [
-        { input: "", expected: "d41d8cd98f00b204e9800998ecf8427e" },
-        { input: "a", expected: "0cc175b9c0f1b6a831c399e269772661" },
-        { input: "abc", expected: "900150983cd24fb0d6963f7d28e17f72" },
-        { input: "message digest", expected: "f96b697d7cb7938d525a2f31aaf161d0" },
-        { input: "abcdefghijklmnopqrstuvwxyz", expected: "c3fcd3d76192e4007dfb496cca67e13b" }
-      ];
-      for (const { input, expected } of testVectors) {
-        const data = encoder.encode(input);
-        const hash = gen.calculateMD5(data);
-        const hashHex = Array.from(hash).map((b) => b.toString(16).padStart(2, "0")).join("");
-        if (hashHex !== expected) {
-          console.error(`MD5 verification failed for "${input}": got ${hashHex}, expected ${expected}`);
-          return false;
-        }
-      }
-      return true;
-    }
-    /**
-     * Get predefined partition table templates
-     */
-    static getTemplates() {
-      return {
-        minimal: [
-          { name: "nvs", type: "data", subtype: "nvs", offset: 36864, size: 24576 },
-          { name: "phy_init", type: "data", subtype: "rf", offset: 61440, size: 4096 },
-          { name: "factory", type: "app", subtype: "factory", offset: 65536, size: 1048576 }
-        ],
-        ota: [
-          { name: "nvs", type: "data", subtype: "nvs", offset: 36864, size: 24576 },
-          { name: "otadata", type: "data", subtype: "ota", offset: 61440, size: 8192 },
-          { name: "ota_0", type: "app", subtype: "ota_0", offset: 131072, size: 1572864 },
-          { name: "ota_1", type: "app", subtype: "ota_1", offset: 1703936, size: 1572864 }
-        ],
-        "ota-spiffs": [
-          { name: "nvs", type: "data", subtype: "nvs", offset: 36864, size: 24576 },
-          { name: "otadata", type: "data", subtype: "ota", offset: 61440, size: 8192 },
-          { name: "ota_0", type: "app", subtype: "ota_0", offset: 131072, size: 1572864 },
-          { name: "ota_1", type: "app", subtype: "ota_1", offset: 1703936, size: 1572864 },
-          { name: "spiffs", type: "data", subtype: "spiffs", offset: 3276800, size: 917504 }
-        ],
-        factory: [
-          { name: "nvs", type: "data", subtype: "nvs", offset: 36864, size: 16384 },
-          { name: "otadata", type: "data", subtype: "ota", offset: 53248, size: 8192 },
-          { name: "phy_init", type: "data", subtype: "rf", offset: 61440, size: 4096 },
-          { name: "factory", type: "app", subtype: "factory", offset: 65536, size: 1048576 },
-          { name: "ota_0", type: "app", subtype: "ota_0", offset: 1114112, size: 1048576 },
-          { name: "ota_1", type: "app", subtype: "ota_1", offset: 2162688, size: 1048576 }
-        ]
-      };
+    /** Load from storage */
+    load(data) {
+      this.data = typeof data === "string" ? JSON.parse(data) : { ...data };
     }
   };
-  if (typeof window !== "undefined") {
-    window.PartitionTableGenerator = PartitionTableGenerator;
-  }
 
   // src/core/flasher.js
   var ESPFlasher = class extends EventTarget {
     /**
-     * @param {ESPFlasherOptions} options
+     * @param {FlasherOptions} options
      */
     constructor(options = {}) {
       super();
       this.options = {
         chip: options.chip || null,
         firmwareUrl: options.firmwareUrl || null,
-        firmwareOffset: options.firmwareOffset ?? 0,
+        firmwareOffset: options.firmwareOffset ?? 65536,
         nvsOffset: options.nvsOffset ?? 36864,
         nvsSize: options.nvsSize ?? 24576,
-        nvsNamespace: options.nvsNamespace || "config",
-        baudrate: options.baudrate || 115200,
-        timeout: options.timeout || 15e3,
-        validateOnFlash: options.validateOnFlash !== false
+        nvsNamespace: options.nvsNamespace || "config"
       };
       this.device = new DeviceConnection();
-      this.flasher = new FirmwareFlasher();
+      this.firmware = new FirmwareFlasher();
       this.config = new ConfigStore();
-      this._state = {
-        status: "idle",
-        progress: 0,
-        error: null,
-        canRetry: false,
-        lastOperation: null,
-        lastOperationOptions: null
-      };
-      this._forwardedListeners = [];
-      if (options.configSections) {
-        const fields = flattenConfigSections(options.configSections);
-        this.config.setSchema(fields);
-      } else if (options.fields) {
-        const fields = expandFieldPresets(options.fields);
-        this.config.setSchema(fields);
+      if (options.fields) {
+        this.config.setSchema(expandFieldPresets(options.fields));
+      } else if (options.configSections) {
+        this.config.setSchema(flattenConfigSections(options.configSections));
       }
-      this._setupEventForwarding();
+      this._forward(this.device, ["log", "status", "progress", "error", "connected", "disconnected", "chip-mismatch"]);
+      this._forward(this.firmware, ["log", "status", "progress", "error", "complete"]);
+      this._forward(this.config, ["change", "schema-changed"]);
     }
-    /**
-     * Set up event forwarding with cleanup tracking
-     * @private
-     */
-    _setupEventForwarding() {
-      this._forwardEvents(this.device, ["log", "status", "progress", "error", "connected", "disconnected", "chip-mismatch"]);
-      this._forwardEvents(this.flasher, ["log", "status", "progress", "error", "complete"]);
-      this._forwardEvents(this.config, ["change", "schema-changed"]);
+    /** Forward events from source to this */
+    _forward(source, events) {
+      for (const event of events) {
+        source.addEventListener(
+          event,
+          (e) => this.dispatchEvent(new CustomEvent(event, { detail: e.detail }))
+        );
+      }
     }
-    /**
-     * Forward events from a component with cleanup tracking
-     * @private
-     */
-    _forwardEvents(source, events) {
-      events.forEach((event) => {
-        const handler = (e) => {
-          this._updateStateFromEvent(event, e.detail);
-          this.dispatchEvent(new CustomEvent(event, { detail: e.detail }));
-        };
-        source.addEventListener(event, handler);
-        this._forwardedListeners.push({ source, event, handler });
+    // --- Config ---
+    setConfig(values) {
+      this.config.setAll(values);
+    }
+    getConfig() {
+      return this.config.getAll();
+    }
+    getSchema() {
+      return this.config.getSchema();
+    }
+    // --- Connection ---
+    async connect() {
+      return this.device.connect(this.options.chip, {
+        baudrate: 115200,
+        timeout: 15e3
       });
     }
+    async disconnect() {
+      return this.device.disconnect();
+    }
+    isConnected() {
+      return this.device.getIsConnected();
+    }
+    getDevice() {
+      return this.device;
+    }
+    // --- Flashing ---
     /**
-     * Update internal state based on events
-     * @private
+     * Flash firmware and config
+     * @param {Object} [opts] - Override options
      */
-    _updateStateFromEvent(event, detail) {
-      switch (event) {
-        case "status":
-          this._state.status = detail.state;
-          if (detail.state === "error") {
-            this._state.error = detail.message;
-            this._state.canRetry = true;
-          } else if (detail.state === "complete") {
-            this._state.canRetry = false;
-          }
-          break;
-        case "progress":
-          this._state.progress = detail.percent;
-          break;
-        case "error":
-          this._state.status = "error";
-          this._state.error = detail.message;
-          this._state.canRetry = this._isRetryableError(detail.error);
-          break;
-        case "connected":
-          this._state.status = "connected";
-          this._state.error = null;
-          break;
-        case "complete":
-          this._state.status = "complete";
-          this._state.progress = 100;
-          break;
+    async flash(opts = {}) {
+      const url = opts.firmwareUrl || this.options.firmwareUrl;
+      if (!url && !opts.customFirmware) {
+        throw new Error("No firmware URL specified");
       }
-    }
-    /**
-     * Check if an error is retryable
-     * @private
-     */
-    _isRetryableError(error) {
-      if (!error) return false;
-      const message = error.message || "";
-      return message.includes("timeout") || message.includes("network") || message.includes("disconnect") || message.includes("fetch") || message.includes("Download failed");
-    }
-    /**
-     * Get current flash state
-     * @returns {FlashState}
-     */
-    getState() {
-      return { ...this._state };
-    }
-    /**
-     * Retry the last failed operation
-     * @returns {Promise<boolean>}
-     */
-    async retry() {
-      if (!this._state.canRetry || !this._state.lastOperation) {
-        throw new Error("No operation to retry");
+      if (!this.device.getIsConnected()) {
+        throw new Error("Not connected");
       }
-      const { lastOperation, lastOperationOptions } = this._state;
-      this._state.error = null;
-      this._state.canRetry = false;
-      if (lastOperation === "connect") {
-        return this.connect();
-      } else if (lastOperation === "flash") {
-        return this.flash(lastOperationOptions);
-      } else if (lastOperation === "flashConfig") {
-        return this.flashConfig();
+      const nvsData = this.config.toNVS();
+      const hasConfig = Object.keys(nvsData).length > 0;
+      return this.firmware.flash(this.device, url, {
+        customFirmware: opts.customFirmware,
+        nvsData: hasConfig ? nvsData : null,
+        nvsNamespace: this.options.nvsNamespace,
+        nvsOffset: this.options.nvsOffset,
+        nvsSize: this.options.nvsSize,
+        firmwareOffset: opts.firmwareOffset ?? this.options.firmwareOffset
+      });
+    }
+    /** Flash only NVS config (no firmware) */
+    async flashConfig() {
+      if (!this.device.getIsConnected()) {
+        throw new Error("Not connected");
       }
-      throw new Error(`Unknown operation: ${lastOperation}`);
+      const nvsData = this.config.toNVS();
+      if (Object.keys(nvsData).length === 0) {
+        throw new Error("No config to flash");
+      }
+      return this.firmware.flashNVS(this.device, nvsData, {
+        nvsNamespace: this.options.nvsNamespace,
+        nvsOffset: this.options.nvsOffset,
+        nvsSize: this.options.nvsSize
+      });
     }
-    /**
-     * Emit a typed event
-     * @private
-     */
-    emit(type, detail) {
-      this.dispatchEvent(new CustomEvent(type, { detail }));
+    /** Hard reset device */
+    async reset() {
+      return this.device.hardReset();
     }
-    /**
-     * Clean up all event listeners and resources
-     * Call this when disposing of the flasher instance
-     */
+    /** Clean up */
     dispose() {
-      for (const { source, event, handler } of this._forwardedListeners) {
-        source.removeEventListener(event, handler);
-      }
-      this._forwardedListeners = [];
       if (this.device.getIsConnected()) {
         this.device.disconnect().catch(() => {
         });
       }
-      this._state = {
-        status: "idle",
-        progress: 0,
-        error: null,
-        canRetry: false,
-        lastOperation: null,
-        lastOperationOptions: null
-      };
-    }
-    /**
-     * Set configuration values
-     * @param {Object} values - Key-value pairs
-     * @param {Object} [options] - Options
-     * @param {boolean} [options.validate=true] - Emit warnings for unknown keys
-     */
-    setConfig(values, options = {}) {
-      const { validate = true } = options;
-      if (validate && this.config.getSchema()) {
-        for (const key of Object.keys(values)) {
-          if (!this.config.hasField(key)) {
-            this.emit("log", {
-              message: `Unknown config key "${key}" - not in schema. This may not be saved to NVS correctly.`,
-              level: "warning"
-            });
-          }
-        }
-      }
-      this.config.setAll(values);
-    }
-    /**
-     * Validate current configuration
-     * @returns {import('./config-store.js').ValidationResult}
-     */
-    validateConfig() {
-      return this.config.validate();
-    }
-    /**
-     * Get current configuration
-     * @returns {Object}
-     */
-    getConfig() {
-      return this.config.getAll();
-    }
-    /**
-     * Get config field schema
-     * @returns {Array|null}
-     */
-    getSchema() {
-      return this.config.getSchema();
-    }
-    /**
-     * Connect to ESP device
-     * @returns {Promise<{chipType: string, macAddr: string}>}
-     */
-    async connect() {
-      this._state.lastOperation = "connect";
-      this._state.lastOperationOptions = null;
-      this._state.status = "connecting";
-      try {
-        const result = await this.device.connect(this.options.chip, {
-          baudrate: this.options.baudrate,
-          timeout: this.options.timeout
-        });
-        this._state.canRetry = false;
-        return result;
-      } catch (error) {
-        this._state.canRetry = this._isRetryableError(error);
-        throw error;
-      }
-    }
-    /**
-     * Disconnect from device
-     */
-    async disconnect() {
-      return this.device.disconnect();
-    }
-    /**
-     * Cancel in-progress connection
-     */
-    cancelConnection() {
-      this.device.cancel();
-    }
-    /**
-     * Check if connected
-     * @returns {boolean}
-     */
-    isConnected() {
-      return this.device.getIsConnected();
-    }
-    /**
-     * Flash firmware (and NVS config if set)
-     * @param {Object} [options] - Override options
-     * @param {boolean} [options.skipValidation] - Skip config validation
-     * @returns {Promise<boolean>}
-     */
-    async flash(options = {}) {
-      this._state.lastOperation = "flash";
-      this._state.lastOperationOptions = options;
-      this._state.progress = 0;
-      const firmwareUrl = options.firmwareUrl || this.options.firmwareUrl;
-      if (!firmwareUrl && !options.customFirmware) {
-        throw new Error("No firmware URL specified");
-      }
-      if (!this.device.getIsConnected()) {
-        throw new Error("Not connected to device. Call connect() first.");
-      }
-      if (this.options.validateOnFlash && !options.skipValidation) {
-        const validation = this.config.validate();
-        if (!validation.valid) {
-          const errorMessages = Object.values(validation.errors);
-          this.emit("log", {
-            message: `Config validation failed: ${errorMessages.join(", ")}`,
-            level: "error"
-          });
-          this.emit("validation-failed", {
-            validation,
-            errors: validation.errors,
-            missing: validation.missing
-          });
-          throw new Error(`Configuration validation failed: ${validation.missing.join(", ")} required`);
-        }
-      }
-      const nvsData = this.config.toNVS();
-      const hasConfig = Object.keys(nvsData).length > 0;
-      try {
-        const result = await this.flasher.flash(this.device, firmwareUrl, {
-          customFirmware: options.customFirmware,
-          nvsData: hasConfig ? nvsData : null,
-          nvsNamespace: this.options.nvsNamespace,
-          nvsOffset: this.options.nvsOffset,
-          nvsSize: this.options.nvsSize,
-          firmwareOffset: options.firmwareOffset ?? this.options.firmwareOffset
-        });
-        this._state.canRetry = false;
-        return result;
-      } catch (error) {
-        this._state.canRetry = this._isRetryableError(error);
-        throw error;
-      }
-    }
-    /**
-     * Flash only NVS configuration (without firmware)
-     * @param {Object} [options] - Options
-     * @param {boolean} [options.skipValidation] - Skip config validation
-     * @returns {Promise<boolean>}
-     */
-    async flashConfig(options = {}) {
-      this._state.lastOperation = "flashConfig";
-      this._state.lastOperationOptions = options;
-      if (!this.device.getIsConnected()) {
-        throw new Error("Not connected to device. Call connect() first.");
-      }
-      if (this.options.validateOnFlash && !options.skipValidation) {
-        const validation = this.config.validate();
-        if (!validation.valid) {
-          this.emit("validation-failed", {
-            validation,
-            errors: validation.errors,
-            missing: validation.missing
-          });
-          throw new Error(`Configuration validation failed: ${validation.missing.join(", ")} required`);
-        }
-      }
-      const nvsData = this.config.toNVS();
-      if (Object.keys(nvsData).length === 0) {
-        throw new Error("No configuration to flash");
-      }
-      try {
-        const result = await this.flasher.flashNVS(this.device, nvsData, {
-          nvsNamespace: this.options.nvsNamespace,
-          nvsOffset: this.options.nvsOffset,
-          nvsSize: this.options.nvsSize
-        });
-        this._state.canRetry = false;
-        return result;
-      } catch (error) {
-        this._state.canRetry = this._isRetryableError(error);
-        throw error;
-      }
-    }
-    /**
-     * Hard reset the device
-     */
-    async reset() {
-      return this.device.hardReset();
-    }
-    /**
-     * Get the underlying device connection (for advanced usage)
-     * @returns {DeviceConnection}
-     */
-    getDevice() {
-      return this.device;
     }
   };
+  async function flashDevice(options) {
+    const {
+      firmware,
+      config,
+      chip,
+      onProgress,
+      onLog,
+      firmwareOffset = 65536,
+      nvsOffset = 36864
+    } = options;
+    if (!firmware) {
+      throw new Error("firmware URL is required");
+    }
+    const flasher = new ESPFlasher({
+      chip,
+      firmwareUrl: firmware,
+      firmwareOffset,
+      nvsOffset
+    });
+    if (onProgress) {
+      flasher.addEventListener("progress", (e) => onProgress(e.detail.percent));
+    }
+    if (onLog) {
+      flasher.addEventListener("log", (e) => onLog(e.detail.message, e.detail.level));
+    }
+    try {
+      const deviceInfo = await flasher.connect();
+      if (config && Object.keys(config).length > 0) {
+        flasher.setConfig(config);
+      }
+      await flasher.flash();
+      await flasher.reset();
+      return deviceInfo;
+    } finally {
+      flasher.dispose();
+    }
+  }
 
   // src/adapters/vanilla/ui.js
   var DEFAULT_BINDINGS = {
@@ -1778,8 +951,7 @@ var ESPWebFlash = (() => {
     "error": "handleError",
     "chip-mismatch": "handleChipMismatch",
     "complete": "handleComplete",
-    "schema-changed": "handleSchemaChanged",
-    "validation-failed": "handleValidationFailed"
+    "schema-changed": "handleSchemaChanged"
   };
   var FlasherUI = class {
     /**
@@ -1841,27 +1013,6 @@ var ESPWebFlash = (() => {
      */
     handleSchemaChanged({ schema }) {
       this.renderConfigForm(schema);
-    }
-    /**
-     * Handle validation failures
-     * @private
-     */
-    handleValidationFailed({ errors, missing }) {
-      if (this.elements.configContainer) {
-        for (const key of Object.keys(errors)) {
-          const input = this.elements.configContainer.querySelector(`[data-key="${key}"]`);
-          if (input) {
-            input.classList.add("error");
-            let errorEl = input.parentNode.querySelector(".field-error");
-            if (!errorEl) {
-              errorEl = document.createElement("span");
-              errorEl.className = "field-error";
-              input.parentNode.appendChild(errorEl);
-            }
-            errorEl.textContent = errors[key];
-          }
-        }
-      }
     }
     /**
      * Handle status updates
@@ -1971,29 +1122,13 @@ var ESPWebFlash = (() => {
     /**
      * Handle errors
      */
-    handleError({ message, error }) {
+    handleError({ message }) {
       if (this.elements.statusBox) {
-        const state = this.flasher.getState();
-        const retryHtml = state.canRetry && this.elements.retryBtn ? "" : state.canRetry ? `<button class="retry-btn" onclick="this.closest('.status-box').dispatchEvent(new CustomEvent('retry'))">Retry</button>` : "";
         this.elements.statusBox.className = "status-box error";
         this.elements.statusBox.innerHTML = `
                 <div class="status-text">Error</div>
                 <div class="status-subtext">${message}</div>
-                ${retryHtml}
             `;
-        const retryBtn = this.elements.statusBox.querySelector(".retry-btn");
-        if (retryBtn) {
-          retryBtn.addEventListener("click", async () => {
-            try {
-              await this.flasher.retry();
-            } catch (e) {
-            }
-          });
-        }
-      }
-      if (this.elements.retryBtn) {
-        const state = this.flasher.getState();
-        this.elements.retryBtn.style.display = state.canRetry ? "block" : "none";
       }
     }
     /**
@@ -2311,8 +1446,8 @@ Do you want to continue anyway?`
                  <span>${project.documentation.label}</span>
                  <span class="external-icon">\u2197</span>
                </a>` : "";
-      const configNames = project.configSections?.map((s) => s.title).join(", ") || "";
-      const configStep = configNames ? `Configure ${configNames} in the center panel` : "Review configuration in the center panel";
+      const hasConfig = project.fields?.length > 0 || project.configSections?.length > 0;
+      const configStep = hasConfig ? "Configure settings in the center panel" : "No configuration needed";
       document.getElementById("project-details").innerHTML = `
             <p style="margin-bottom: 24px;">${project.description}</p>
             ${docLink}
@@ -2724,18 +1859,6 @@ Do you want to continue anyway?`
       };
       elements.flashBtn.addEventListener("click", flashHandler);
       buttonListeners.push({ element: elements.flashBtn, event: "click", handler: flashHandler });
-    }
-    if (elements.retryBtn) {
-      const retryHandler = async () => {
-        elements.retryBtn.disabled = true;
-        try {
-          await flasher.retry();
-        } catch (e) {
-          elements.retryBtn.disabled = false;
-        }
-      };
-      elements.retryBtn.addEventListener("click", retryHandler);
-      buttonListeners.push({ element: elements.retryBtn, event: "click", handler: retryHandler });
     }
     function dispose() {
       for (const { element, event, handler } of buttonListeners) {

@@ -8,8 +8,7 @@ const DEFAULT_BINDINGS = {
   "error": "handleError",
   "chip-mismatch": "handleChipMismatch",
   "complete": "handleComplete",
-  "schema-changed": "handleSchemaChanged",
-  "validation-failed": "handleValidationFailed"
+  "schema-changed": "handleSchemaChanged"
 };
 class FlasherUI {
   /**
@@ -71,27 +70,6 @@ class FlasherUI {
    */
   handleSchemaChanged({ schema }) {
     this.renderConfigForm(schema);
-  }
-  /**
-   * Handle validation failures
-   * @private
-   */
-  handleValidationFailed({ errors, missing }) {
-    if (this.elements.configContainer) {
-      for (const key of Object.keys(errors)) {
-        const input = this.elements.configContainer.querySelector(`[data-key="${key}"]`);
-        if (input) {
-          input.classList.add("error");
-          let errorEl = input.parentNode.querySelector(".field-error");
-          if (!errorEl) {
-            errorEl = document.createElement("span");
-            errorEl.className = "field-error";
-            input.parentNode.appendChild(errorEl);
-          }
-          errorEl.textContent = errors[key];
-        }
-      }
-    }
   }
   /**
    * Handle status updates
@@ -201,29 +179,13 @@ class FlasherUI {
   /**
    * Handle errors
    */
-  handleError({ message, error }) {
+  handleError({ message }) {
     if (this.elements.statusBox) {
-      const state = this.flasher.getState();
-      const retryHtml = state.canRetry && this.elements.retryBtn ? "" : state.canRetry ? `<button class="retry-btn" onclick="this.closest('.status-box').dispatchEvent(new CustomEvent('retry'))">Retry</button>` : "";
       this.elements.statusBox.className = "status-box error";
       this.elements.statusBox.innerHTML = `
                 <div class="status-text">Error</div>
                 <div class="status-subtext">${message}</div>
-                ${retryHtml}
             `;
-      const retryBtn = this.elements.statusBox.querySelector(".retry-btn");
-      if (retryBtn) {
-        retryBtn.addEventListener("click", async () => {
-          try {
-            await this.flasher.retry();
-          } catch (e) {
-          }
-        });
-      }
-    }
-    if (this.elements.retryBtn) {
-      const state = this.flasher.getState();
-      this.elements.retryBtn.style.display = state.canRetry ? "block" : "none";
     }
   }
   /**

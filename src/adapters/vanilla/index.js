@@ -36,8 +36,8 @@ import { FlasherUI } from './ui.js';
  * @typedef {Object} VanillaFlasherOptions
  * @property {string} [chip] - Expected chip type
  * @property {string} [firmwareUrl] - Firmware URL
- * @property {Array} [fields] - Config field definitions
- * @property {Array} [configSections] - Legacy section-based config format
+ * @property {Array} [fields] - Config field definitions or preset names
+ * @property {Array} [configSections] - Legacy section-based config (auto-converted)
  * @property {Object} elements - DOM element references
  * @property {string} [storageKey] - localStorage key for config persistence
  */
@@ -113,18 +113,6 @@ export function createFlasher(options) {
         buttonListeners.push({ element: elements.flashBtn, event: 'click', handler: flashHandler });
     }
 
-    if (elements.retryBtn) {
-        const retryHandler = async () => {
-            elements.retryBtn.disabled = true;
-            try {
-                await flasher.retry();
-            } catch (e) {
-                elements.retryBtn.disabled = false;
-            }
-        };
-        elements.retryBtn.addEventListener('click', retryHandler);
-        buttonListeners.push({ element: elements.retryBtn, event: 'click', handler: retryHandler });
-    }
 
     /**
      * Clean up all resources

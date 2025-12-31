@@ -10,13 +10,13 @@
 // Core exports
 export {
     ESPFlasher,
+    flashDevice,
     DeviceConnection,
     FirmwareFlasher,
+    NVSGenerator,
     ConfigStore,
     FieldPresets,
-    expandFieldPresets,
-    NVSGenerator,
-    PartitionTableGenerator
+    expandFieldPresets
 } from './core/index.js';
 
 // Vanilla adapter exports

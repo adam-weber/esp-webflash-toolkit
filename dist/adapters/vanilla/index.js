@@ -44,18 +44,6 @@ function createFlasher(options) {
     elements.flashBtn.addEventListener("click", flashHandler);
     buttonListeners.push({ element: elements.flashBtn, event: "click", handler: flashHandler });
   }
-  if (elements.retryBtn) {
-    const retryHandler = async () => {
-      elements.retryBtn.disabled = true;
-      try {
-        await flasher.retry();
-      } catch (e) {
-        elements.retryBtn.disabled = false;
-      }
-    };
-    elements.retryBtn.addEventListener("click", retryHandler);
-    buttonListeners.push({ element: elements.retryBtn, event: "click", handler: retryHandler });
-  }
   function dispose() {
     for (const { element, event, handler } of buttonListeners) {
       element.removeEventListener(event, handler);

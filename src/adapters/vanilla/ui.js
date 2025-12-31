@@ -20,7 +20,6 @@ import { groupFieldsBySection } from '../../core/config-store.js';
  * @property {HTMLElement} [configContainer] - Config form container
  * @property {HTMLElement} [connectBtn] - Connect button
  * @property {HTMLElement} [flashBtn] - Flash button
- * @property {HTMLElement} [retryBtn] - Retry button (shown on retryable errors)
  */
 
 /**
@@ -36,8 +35,7 @@ const DEFAULT_BINDINGS = {
     'error': 'handleError',
     'chip-mismatch': 'handleChipMismatch',
     'complete': 'handleComplete',
-    'schema-changed': 'handleSchemaChanged',
-    'validation-failed': 'handleValidationFailed'
+    'schema-changed': 'handleSchemaChanged'
 };
 
 export class FlasherUI {
@@ -114,30 +112,6 @@ export class FlasherUI {
      */
     handleSchemaChanged({ schema }) {
         this.renderConfigForm(schema);
-    }
-
-    /**
-     * Handle validation failures
-     * @private
-     */
-    handleValidationFailed({ errors, missing }) {
-        // Highlight fields with errors
-        if (this.elements.configContainer) {
-            for (const key of Object.keys(errors)) {
-                const input = this.elements.configContainer.querySelector(`[data-key="${key}"]`);
-                if (input) {
-                    input.classList.add('error');
-                    // Find or create error message
-                    let errorEl = input.parentNode.querySelector('.field-error');
-                    if (!errorEl) {
-                        errorEl = document.createElement('span');
-                        errorEl.className = 'field-error';
-                        input.parentNode.appendChild(errorEl);
-                    }
-                    errorEl.textContent = errors[key];
-                }
-            }
-        }
     }
 
     /**
@@ -271,39 +245,13 @@ export class FlasherUI {
     /**
      * Handle errors
      */
-    handleError({ message, error }) {
+    handleError({ message }) {
         if (this.elements.statusBox) {
-            const state = this.flasher.getState();
-            const retryHtml = state.canRetry && this.elements.retryBtn
-                ? ''  // Retry button handled separately
-                : (state.canRetry
-                    ? `<button class="retry-btn" onclick="this.closest('.status-box').dispatchEvent(new CustomEvent('retry'))">Retry</button>`
-                    : '');
-
             this.elements.statusBox.className = 'status-box error';
             this.elements.statusBox.innerHTML = `
                 <div class="status-text">Error</div>
                 <div class="status-subtext">${message}</div>
-                ${retryHtml}
             `;
-
-            // Wire up inline retry button if present
-            const retryBtn = this.elements.statusBox.querySelector('.retry-btn');
-            if (retryBtn) {
-                retryBtn.addEventListener('click', async () => {
-                    try {
-                        await this.flasher.retry();
-                    } catch (e) {
-                        // Error will be emitted through events
-                    }
-                });
-            }
-        }
-
-        // Show dedicated retry button if available
-        if (this.elements.retryBtn) {
-            const state = this.flasher.getState();
-            this.elements.retryBtn.style.display = state.canRetry ? 'block' : 'none';
         }
     }
 

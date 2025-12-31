@@ -1,38 +1,33 @@
 /**
  * ESP WebFlash Toolkit - Core Library
  *
- * Headless, framework-agnostic library for flashing ESP32 devices from the browser.
+ * Simple API:
+ * @example
+ * import { flashDevice } from 'esp-webflash-toolkit';
  *
+ * await flashDevice({
+ *   firmware: 'https://example.com/firmware.bin',
+ *   config: { wifi_ssid: 'MyNetwork', wifi_pass: 'secret' },
+ *   onProgress: (percent) => console.log(`${percent}%`)
+ * });
+ *
+ * Advanced API (for custom UIs):
  * @example
  * import { ESPFlasher } from 'esp-webflash-toolkit';
  *
- * const flasher = new ESPFlasher({
- *   chip: 'esp32s3',
- *   firmwareUrl: 'https://...',
- *   fields: ['wifi', 'device_name']
- * });
- *
- * flasher.on('progress', ({ percent }) => console.log(`${percent}%`));
- *
+ * const flasher = new ESPFlasher({ chip: 'esp32', firmwareUrl: '...' });
+ * flasher.addEventListener('progress', e => updateUI(e.detail.percent));
  * await flasher.connect();
- * flasher.setConfig({ wifi_ssid: 'MyNetwork', wifi_pass: 'secret' });
  * await flasher.flash();
  */
 
-// Main orchestrator
-export { ESPFlasher } from './flasher.js';
+// Main API
+export { ESPFlasher, flashDevice } from './flasher.js';
 
-// Individual components for advanced usage
+// Low-level components (for advanced usage)
 export { DeviceConnection } from './device-connection.js';
 export { FirmwareFlasher } from './firmware-flasher.js';
-export {
-    ConfigStore,
-    FieldPresets,
-    expandFieldPresets,
-    flattenConfigSections,
-    groupFieldsBySection
-} from './config-store.js';
-
-// Pure utilities
 export { NVSGenerator } from './nvs-generator.js';
-export { PartitionTableGenerator } from './partition-table-generator.js';
+
+// Config utilities
+export { ConfigStore, FieldPresets, expandFieldPresets } from './config-store.js';

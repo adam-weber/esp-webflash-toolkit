@@ -13,7 +13,8 @@
  * @author Adam Weber (github: adam-weber)
  */
 
-import { ESPFlasher, NVSGenerator, expandFieldPresets, groupFieldsBySection } from '../../core/index.js';
+import { ESPFlasher, NVSGenerator, expandFieldPresets } from '../../core/index.js';
+import { groupFieldsBySection } from '../../core/config-store.js';
 import { FlasherUI } from './ui.js';
 
 /**
@@ -274,10 +275,10 @@ export class FlasherApp {
                </a>`
             : '';
 
-        const configNames = project.configSections?.map(s => s.title).join(', ') || '';
-        const configStep = configNames
-            ? `Configure ${configNames} in the center panel`
-            : 'Review configuration in the center panel';
+        const hasConfig = project.fields?.length > 0 || project.configSections?.length > 0;
+        const configStep = hasConfig
+            ? 'Configure settings in the center panel'
+            : 'No configuration needed';
 
         document.getElementById('project-details').innerHTML = `
             <p style="margin-bottom: 24px;">${project.description}</p>
