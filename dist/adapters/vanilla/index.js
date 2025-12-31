@@ -40,7 +40,9 @@ function createFlasher(options) {
   return { flasher, ui };
 }
 import { FlasherUI as FlasherUI2 } from "./ui.js";
+import { FlasherApp } from "./app.js";
 export {
+  FlasherApp,
   FlasherUI2 as FlasherUI,
   createFlasher
 };

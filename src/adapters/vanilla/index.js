@@ -95,5 +95,6 @@ export function createFlasher(options) {
     return { flasher, ui };
 }
 
-// Re-export UI class for advanced usage
+// Re-export classes for direct usage
 export { FlasherUI } from './ui.js';
+export { FlasherApp } from './app.js';

@@ -208,16 +208,16 @@
 
     <!-- App-specific config -->
     <script src="js/projects-config.js"></script>
-    <script src="js/nvs-generator.js"></script>
 
-    <script type="module">
-        // Import modules
-        import { FlasherApp } from './js/main-app.js';
+    <!-- ESP WebFlash Toolkit - full bundle with FlasherApp -->
+    <script src="https://cdn.jsdelivr.net/npm/esp-webflash-toolkit@latest/dist/esp-webflash-toolkit-full.min.js"></script>
 
+    <script>
         // Get projects from global scope (loaded by projects-config.js)
         const projects = window.PROJECTS || {};
 
-        // Initialize the application
+        // Initialize the application using FlasherApp from the bundle
+        const { FlasherApp } = ESPWebFlash;
         const app = new FlasherApp(projects);
     </script>
 </body>

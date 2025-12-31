@@ -2,7 +2,18 @@
 
 /**
  * Build Script for ESP WebFlash Toolkit
- * Builds the headless core library and adapters
+ * Builds the headless core library, adapters, and browser bundles
+ *
+ * Output structure:
+ *   dist/
+ *     core/                    - ESM modules for npm import
+ *     adapters/vanilla/        - Vanilla JS adapter
+ *     esp-webflash-toolkit.js  - IIFE bundle (core only)
+ *     esp-webflash-toolkit.min.js
+ *     esp-webflash-toolkit-full.js  - IIFE bundle (core + vanilla adapter)
+ *     esp-webflash-toolkit-full.min.js
+ *
+ * Templates use the full bundle via CDN or local reference.
  *
  * @author Adam Weber (github: adam-weber)
  */
@@ -27,42 +38,26 @@ async function main() {
     await fs.remove(distDir);
     await fs.ensureDir(distDir);
 
-    // Build core modules
+    // Build core modules (ESM for npm)
     console.log('\nBuilding core modules...');
     await buildDirectory(
         path.join(srcDir, 'core'),
         path.join(distDir, 'core')
     );
 
-    // Build vanilla adapter
+    // Build vanilla adapter (ESM for npm)
     console.log('\nBuilding vanilla adapter...');
     await buildDirectory(
         path.join(srcDir, 'adapters', 'vanilla'),
         path.join(distDir, 'adapters', 'vanilla')
     );
 
-    // Build bundled version for CDN/browser use
-    console.log('\nBuilding browser bundle...');
-    await buildBundle();
-
-    // Copy legacy modules for backwards compatibility
-    console.log('\nCopying legacy modules for backwards compatibility...');
-    await copyLegacyModules();
-
-    // Update templates with new core
-    console.log('\nUpdating templates...');
-    await updateTemplates();
+    // Build browser bundles
+    console.log('\nBuilding browser bundles...');
+    await buildBundles();
 
     console.log('\nBuild complete!\n');
-    console.log('Exports:');
-    console.log('  import { ESPFlasher } from "esp-webflash-toolkit"');
-    console.log('  import { createFlasher } from "esp-webflash-toolkit/adapters/vanilla"');
-    console.log('  import { NVSGenerator } from "esp-webflash-toolkit/nvs-generator"');
-    console.log('');
-    console.log('Browser/CDN:');
-    console.log('  <script src="dist/esp-webflash-toolkit.min.js"></script>');
-    console.log('  const { ESPFlasher, NVSGenerator } = ESPWebFlash;');
-    console.log('');
+    printUsage();
 }
 
 async function buildDirectory(srcPath, destPath) {
@@ -75,7 +70,7 @@ async function buildDirectory(srcPath, destPath) {
         const inputPath = path.join(srcPath, file);
         const outputPath = path.join(destPath, file);
 
-        // Pure utility files (no imports to transform) - just copy
+        // Pure utility files (no ES imports) - just copy
         if (file === 'nvs-generator.js' || file === 'partition-table-generator.js') {
             await fs.copy(inputPath, outputPath);
             console.log(`  ${file} (copied)`);
@@ -90,7 +85,7 @@ async function buildDirectory(srcPath, destPath) {
                 format: 'esm',
                 platform: 'browser',
                 target: 'es2020',
-                minify: false,  // Keep readable for debugging
+                minify: false,
                 sourcemap: true,
                 logLevel: 'warning'
             });
@@ -102,91 +97,78 @@ async function buildDirectory(srcPath, destPath) {
     }
 }
 
-async function copyLegacyModules() {
-    // For backwards compatibility, copy core modules to dist root
-    const legacyMappings = {
-        'nvs-generator.js': 'core/nvs-generator.js',
-        'partition-table-generator.js': 'core/partition-table-generator.js'
-    };
+async function buildBundles() {
+    // Core-only bundle (ESPFlasher, NVSGenerator, etc.)
+    await buildBundle({
+        name: 'esp-webflash-toolkit',
+        entry: path.join(srcDir, 'core', 'index.js'),
+        globalName: 'ESPWebFlash'
+    });
 
-    for (const [legacy, core] of Object.entries(legacyMappings)) {
-        const src = path.join(distDir, core);
-        const dest = path.join(distDir, legacy);
-        if (await fs.pathExists(src)) {
-            await fs.copy(src, dest);
-            console.log(`  ${legacy} -> ${core}`);
-        }
-    }
+    // Full bundle with vanilla adapter (includes FlasherApp)
+    await buildBundle({
+        name: 'esp-webflash-toolkit-full',
+        entry: path.join(srcDir, 'bundle-full.js'),
+        globalName: 'ESPWebFlash'
+    });
 }
 
-async function buildBundle() {
-    // Create a single bundled file for browser/CDN use
-    // This bundles everything into one file with a global export
-
-    const bundleEntry = path.join(srcDir, 'core', 'index.js');
-    const bundleOutput = path.join(distDir, 'esp-webflash-toolkit.min.js');
+async function buildBundle({ name, entry, globalName }) {
+    const outputMin = path.join(distDir, `${name}.min.js`);
+    const outputDev = path.join(distDir, `${name}.js`);
 
     try {
+        // Minified production build
         await build({
-            entryPoints: [bundleEntry],
-            outfile: bundleOutput,
+            entryPoints: [entry],
+            outfile: outputMin,
             bundle: true,
             format: 'iife',
-            globalName: 'ESPWebFlash',
+            globalName,
             platform: 'browser',
             target: 'es2020',
             minify: true,
             sourcemap: true,
-            logLevel: 'warning',
-            // Don't bundle esptool-js - it's loaded dynamically
-            external: []
+            logLevel: 'warning'
         });
-        console.log('  esp-webflash-toolkit.min.js');
+        console.log(`  ${name}.min.js`);
 
-        // Also create non-minified version for debugging
-        const bundleOutputDev = path.join(distDir, 'esp-webflash-toolkit.js');
+        // Development build (readable)
         await build({
-            entryPoints: [bundleEntry],
-            outfile: bundleOutputDev,
+            entryPoints: [entry],
+            outfile: outputDev,
             bundle: true,
             format: 'iife',
-            globalName: 'ESPWebFlash',
+            globalName,
             platform: 'browser',
             target: 'es2020',
             minify: false,
             sourcemap: true,
             logLevel: 'warning'
         });
-        console.log('  esp-webflash-toolkit.js (dev)');
+        console.log(`  ${name}.js`);
 
     } catch (error) {
-        console.error(`  Bundle error: ${error.message}`);
+        console.error(`  Bundle error (${name}): ${error.message}`);
         process.exit(1);
     }
 }
 
-async function updateTemplates() {
-    const templateJsDir = path.join(rootDir, 'templates', 'flasher', 'js');
-
-    // For now, keep templates using the old structure
-    // They work standalone and don't need the headless core
-    // Future: refactor templates to use core + vanilla adapter
-
-    // Copy NVS generator to templates (it's still needed standalone)
-    const nvsSource = path.join(srcDir, 'core', 'nvs-generator.js');
-    const nvsDest = path.join(templateJsDir, 'nvs-generator.js');
-    if (await fs.pathExists(nvsSource)) {
-        await fs.copy(nvsSource, nvsDest);
-        console.log('  nvs-generator.js -> templates/');
-    }
-
-    // Copy partition table generator
-    const ptSource = path.join(srcDir, 'core', 'partition-table-generator.js');
-    const ptDest = path.join(templateJsDir, 'partition-table-generator.js');
-    if (await fs.pathExists(ptSource)) {
-        await fs.copy(ptSource, ptDest);
-        console.log('  partition-table-generator.js -> templates/');
-    }
+function printUsage() {
+    console.log('Usage:');
+    console.log('');
+    console.log('NPM / ES Modules:');
+    console.log('  import { ESPFlasher } from "esp-webflash-toolkit"');
+    console.log('  import { createFlasher, FlasherApp } from "esp-webflash-toolkit/adapters/vanilla"');
+    console.log('');
+    console.log('Browser / CDN (core only):');
+    console.log('  <script src="esp-webflash-toolkit.min.js"></script>');
+    console.log('  const { ESPFlasher, NVSGenerator } = ESPWebFlash;');
+    console.log('');
+    console.log('Browser / CDN (full with UI adapter):');
+    console.log('  <script src="esp-webflash-toolkit-full.min.js"></script>');
+    console.log('  const { ESPFlasher, FlasherApp, createFlasher } = ESPWebFlash;');
+    console.log('');
 }
 
 main().catch(error => {

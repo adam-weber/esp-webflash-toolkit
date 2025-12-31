@@ -25,11 +25,9 @@
   "homepage": "https://github.com/adam-weber/esp-webflash-toolkit#readme",
   "main": "./dist/core/index.js",
   "module": "./dist/core/index.js",
-  "types": "./dist/core/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/core/index.js",
-      "types": "./dist/core/index.d.ts"
+      "import": "./dist/core/index.js"
     },
     "./core": {
       "import": "./dist/core/index.js"
@@ -42,7 +40,12 @@
     },
     "./partition-table-generator": {
       "import": "./dist/core/partition-table-generator.js"
-    }
+    },
+    "./dist/*": "./dist/*"
+  },
+  "browser": {
+    ".": "./dist/esp-webflash-toolkit.min.js",
+    "./full": "./dist/esp-webflash-toolkit-full.min.js"
   },
   "bin": {
     "esp-webflash-toolkit": "./bin/cli.js"
