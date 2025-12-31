@@ -1,13 +1,13 @@
 # Quickstart
 
-End-to-end example: generate config in browser, flash to device, read in firmware.
+Flash ESP32 firmware from a browser with optional NVS configuration.
 
 ## Installation
 
 ### Browser (CDN)
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/adam-weber/esp-webflash-toolkit@main/dist/nvs-generator.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/adam-weber/esp-webflash-toolkit@main/dist/esp-webflash-toolkit-full.min.js"></script>
 ```
 
 ### npm
@@ -16,40 +16,79 @@ End-to-end example: generate config in browser, flash to device, read in firmwar
 npm install esp-webflash-toolkit
 ```
 
-## End-to-End Example
+## Vanilla JavaScript (Browser)
 
-### 1. Generate and Flash (Browser/JavaScript)
+### One-Liner Flash
 
-```javascript
-import { NVSGenerator } from 'esp-webflash-toolkit/nvs-generator';
+```html
+<script src="https://cdn.jsdelivr.net/gh/adam-weber/esp-webflash-toolkit@main/dist/esp-webflash-toolkit-full.min.js"></script>
+<script>
+document.getElementById('flash-btn').onclick = async () => {
+    await ESPWebFlash.flashDevice({
+        firmware: 'https://example.com/firmware.bin',
+        config: { wifi_ssid: 'MyNetwork', wifi_pass: 'secret' },
+        onProgress: (pct) => console.log(pct + '%')
+    });
+};
+</script>
+```
 
-// Generate the NVS partition
-const generator = new NVSGenerator();
-const nvsBinary = generator.generate({
-    config: {
-        wifi_ssid: "MyNetwork",
-        wifi_pass: "SecurePass123",
-        api_url: "https://api.example.com",
-        device_id: 42
-    }
-}, 0x6000);  // 24KB partition
+### With More Control
 
-// Flash to device via Web Serial
-const port = await navigator.serial.requestPort();
-await port.open({ baudRate: 115200 });
+```html
+<script src="https://cdn.jsdelivr.net/gh/adam-weber/esp-webflash-toolkit@main/dist/esp-webflash-toolkit-full.min.js"></script>
+<script>
+const { ESPFlasher } = ESPWebFlash;
 
-const esploader = new ESPLoader(port, { debugLogging: false });
-await esploader.connect();
-
-await esploader.writeFlash({
-    fileArray: [{ data: toFlashString(nvsBinary), address: 0x9000 }],
-    flashSize: 'keep'
+const flasher = new ESPFlasher({
+    chip: 'esp32',
+    firmwareUrl: 'https://example.com/firmware.bin',
+    fields: ['wifi']  // expands to wifi_ssid + wifi_pass fields
 });
 
-// Helper: convert Uint8Array to string for esptool-js
-function toFlashString(bytes) {
-    return String.fromCharCode(...bytes);
-}
+flasher.addEventListener('progress', e => {
+    document.getElementById('progress').textContent = e.detail.percent + '%';
+});
+
+flasher.addEventListener('log', e => {
+    console.log(e.detail.message);
+});
+
+document.getElementById('connect').onclick = () => flasher.connect();
+document.getElementById('flash').onclick = () => flasher.flash();
+</script>
+```
+
+## ES Modules (npm)
+
+```javascript
+import { flashDevice } from 'esp-webflash-toolkit';
+
+await flashDevice({
+    firmware: 'https://example.com/firmware.bin',
+    config: { wifi_ssid: 'MyNetwork', wifi_pass: 'secret' },
+    onProgress: (pct) => console.log(`${pct}%`)
+});
+```
+
+### Advanced API
+
+```javascript
+import { ESPFlasher } from 'esp-webflash-toolkit';
+
+const flasher = new ESPFlasher({
+    chip: 'esp32s3',
+    firmwareUrl: 'https://example.com/firmware.bin',
+    fields: ['wifi', 'mqtt', { key: 'device_name', label: 'Device Name', type: 'text' }]
+});
+
+flasher.addEventListener('progress', e => updateProgressBar(e.detail.percent));
+flasher.addEventListener('log', e => appendToConsole(e.detail.message));
+
+await flasher.connect();
+flasher.setConfig({ wifi_ssid: 'MyNetwork', wifi_pass: 'secret' });
+await flasher.flash();
+flasher.dispose();
 ```
 
 ### 2. Read Config in Firmware
