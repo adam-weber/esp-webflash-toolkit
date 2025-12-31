@@ -70,26 +70,35 @@ async function buildDirectory(srcPath, destPath) {
         const inputPath = path.join(srcPath, file);
         const outputPath = path.join(destPath, file);
 
-        // Pure utility files (no ES imports) - just copy
-        if (file === 'nvs-generator.js' || file === 'partition-table-generator.js') {
-            await fs.copy(inputPath, outputPath);
-            console.log(`  ${file} (copied)`);
-            continue;
-        }
+        // For ESM builds, we need to strip the window assignments from utility files
+        // These are only needed for IIFE/browser bundles
+        const isUtilityFile = file === 'nvs-generator.js' || file === 'partition-table-generator.js';
 
         try {
-            await build({
-                entryPoints: [inputPath],
-                outfile: outputPath,
-                bundle: false,
-                format: 'esm',
-                platform: 'browser',
-                target: 'es2020',
-                minify: false,
-                sourcemap: true,
-                logLevel: 'warning'
-            });
-            console.log(`  ${file}`);
+            if (isUtilityFile) {
+                // Read and transform: remove window assignments for ESM
+                let content = await fs.readFile(inputPath, 'utf8');
+                // Remove the window assignment block (handles multiline)
+                content = content.replace(
+                    /\n\/\/ Expose to browser global scope[^\n]*\nif \(typeof window !== 'undefined'\) \{[\s\S]*?\n\}\n?/g,
+                    '\n// Browser globals are handled by IIFE bundle\n'
+                );
+                await fs.writeFile(outputPath, content);
+                console.log(`  ${file} (ESM clean)`);
+            } else {
+                await build({
+                    entryPoints: [inputPath],
+                    outfile: outputPath,
+                    bundle: false,
+                    format: 'esm',
+                    platform: 'browser',
+                    target: 'es2020',
+                    minify: false,
+                    sourcemap: true,
+                    logLevel: 'warning'
+                });
+                console.log(`  ${file}`);
+            }
         } catch (error) {
             console.error(`  Error: ${file}: ${error.message}`);
             process.exit(1);

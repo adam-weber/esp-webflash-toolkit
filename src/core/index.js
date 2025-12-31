@@ -25,7 +25,13 @@ export { ESPFlasher } from './flasher.js';
 // Individual components for advanced usage
 export { DeviceConnection } from './device-connection.js';
 export { FirmwareFlasher } from './firmware-flasher.js';
-export { ConfigStore, FieldPresets, expandFieldPresets } from './config-store.js';
+export {
+    ConfigStore,
+    FieldPresets,
+    expandFieldPresets,
+    flattenConfigSections,
+    groupFieldsBySection
+} from './config-store.js';
 
 // Pure utilities
 export { NVSGenerator } from './nvs-generator.js';

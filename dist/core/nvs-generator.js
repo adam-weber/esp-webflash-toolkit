@@ -425,9 +425,4 @@ function parseNVSConfig(binary, namespace = 'config') {
 // ESM exports
 export { NVSGenerator, generateNVSFromConfig, parseNVSConfig };
 
-// Expose to browser global scope for non-module usage
-if (typeof window !== 'undefined') {
-    window.NVSGenerator = NVSGenerator;
-    window.generateNVSFromConfig = generateNVSFromConfig;
-    window.parseNVSConfig = parseNVSConfig;
-}
+// Browser globals are handled by IIFE bundle

@@ -13,7 +13,7 @@
  * @author Adam Weber (github: adam-weber)
  */
 
-import { ESPFlasher, NVSGenerator } from '../../core/index.js';
+import { ESPFlasher, NVSGenerator, expandFieldPresets, groupFieldsBySection } from '../../core/index.js';
 import { FlasherUI } from './ui.js';
 
 /**
@@ -22,8 +22,12 @@ import { FlasherUI } from './ui.js';
  * @property {string} description - Project description
  * @property {string} chip - Expected chip type
  * @property {string} firmwareUrl - Firmware download URL
- * @property {Array} [configSections] - Config form sections
- * @property {Object} [nvsPartition] - NVS partition settings
+ * @property {Array} [fields] - Config field definitions (new format)
+ * @property {Array} [configSections] - Config form sections (legacy format)
+ * @property {number} [nvsOffset] - NVS partition offset (new format)
+ * @property {number} [nvsSize] - NVS partition size (new format)
+ * @property {Object} [nvsPartition] - NVS partition settings (legacy format)
+ * @property {number} [firmwareOffset] - Firmware offset
  * @property {Array} [hardware] - Hardware requirements list
  * @property {Array} [software] - Software features list
  * @property {Object} [documentation] - Documentation link
@@ -91,34 +95,34 @@ export class FlasherApp {
     initFlasher() {
         const project = this.selectedProject;
 
-        // Build field definitions from project config sections
-        const fields = [];
-        if (project.configSections) {
-            project.configSections.forEach(section => {
-                section.fields.forEach(field => {
-                    if (field.nvsKey) {
-                        fields.push({
-                            key: field.nvsKey,
-                            label: field.label,
-                            type: field.type || 'text',
-                            placeholder: field.placeholder,
-                            default: field.default,
-                            required: field.required
-                        });
-                    }
-                });
-            });
+        // Determine NVS settings (support both new and legacy formats)
+        const nvsOffset = project.nvsOffset ??
+            (project.nvsPartition ? parseInt(project.nvsPartition.offset, 16) : 0x9000);
+        const nvsSize = project.nvsSize ??
+            (project.nvsPartition ? parseInt(project.nvsPartition.size, 16) : 0x6000);
+        const nvsNamespace = project.nvsPartition?.namespace || 'config';
+
+        // Build flasher options
+        const flasherOptions = {
+            chip: project.chip,
+            firmwareUrl: project.firmwareUrl,
+            firmwareOffset: project.firmwareOffset ?? 0x10000,
+            nvsOffset,
+            nvsSize,
+            nvsNamespace
+        };
+
+        // Support both new 'fields' format and legacy 'configSections' format
+        if (project.fields) {
+            // New format: use fields directly (with preset expansion)
+            flasherOptions.fields = project.fields;
+        } else if (project.configSections) {
+            // Legacy format: pass configSections for conversion
+            flasherOptions.configSections = project.configSections;
         }
 
         // Create ESPFlasher with project settings
-        this.flasher = new ESPFlasher({
-            chip: project.chip,
-            firmwareUrl: project.firmwareUrl,
-            fields: fields,
-            nvsOffset: project.nvsPartition ? parseInt(project.nvsPartition.offset, 16) : 0x9000,
-            nvsSize: project.nvsPartition ? parseInt(project.nvsPartition.size, 16) : 0x6000,
-            nvsNamespace: project.nvsPartition?.namespace || 'config'
-        });
+        this.flasher = new ESPFlasher(flasherOptions);
 
         // Get UI elements
         const elements = {
@@ -161,20 +165,21 @@ export class FlasherApp {
      * Load saved config from localStorage into flasher
      */
     loadSavedConfigIntoFlasher() {
-        const project = this.selectedProject;
-        if (!project.configSections) return;
+        // Get schema keys to filter config
+        const schema = this.flasher.getSchema();
+        if (!schema || schema.length === 0) return;
 
         const savedConfig = {};
-        project.configSections.forEach(section => {
-            section.fields.forEach(field => {
-                if (field.nvsKey && this.config[section.id]?.[field.id]) {
-                    savedConfig[field.nvsKey] = this.config[section.id][field.id];
-                }
-            });
-        });
+        for (const field of schema) {
+            // Check flat config first (new format)
+            if (this.config[field.key] !== undefined) {
+                savedConfig[field.key] = this.config[field.key];
+            }
+        }
 
         if (Object.keys(savedConfig).length > 0) {
-            this.flasher.setConfig(savedConfig);
+            // Don't validate on load - these are persisted values
+            this.flasher.setConfig(savedConfig, { validate: false });
         }
     }
 
@@ -296,33 +301,41 @@ export class FlasherApp {
 
     /**
      * Render config form fields
+     * Supports both new 'fields' format and legacy 'configSections' format
      */
     renderConfigFields(project) {
         const container = document.getElementById('config-container');
 
-        if (!project.configSections) {
+        // Get schema from flasher (already unified in constructor)
+        const schema = this.flasher.getSchema();
+
+        if (!schema || schema.length === 0) {
             container.innerHTML = '<div style="padding: 20px 0; text-align: center; color: #999; font-size: 13px;">No configuration needed</div>';
             return;
         }
 
         container.innerHTML = '';
 
-        project.configSections.forEach(section => {
+        // Group fields by section for display
+        const sections = groupFieldsBySection(schema);
+
+        for (const section of sections) {
             const group = document.createElement('div');
             group.className = 'config-group';
 
-            let html = `<h3>${section.title}</h3>`;
-            if (section.description) {
-                html += `<p class="help-text" style="margin-bottom: 12px;">${section.description}</p>`;
+            let html = '';
+            if (section.title && section.title !== 'default') {
+                html += `<h3>${section.title}</h3>`;
             }
 
-            section.fields.forEach(field => {
-                const fieldId = `${section.id}-${field.id}`;
-                const savedValue = this.config[section.id]?.[field.id] || field.default || '';
+            for (const field of section.fields) {
+                const savedValue = this.config[field.key] || field.default || '';
+                const escapedPlaceholder = (field.placeholder || '').replace(/"/g, '&quot;');
+                const escapedValue = String(savedValue).replace(/"/g, '&quot;');
 
                 html += `
                     <div class="form-group">
-                        <label for="${fieldId}">
+                        <label for="config-${field.key}">
                             ${field.label}
                             ${field.required
                                 ? '<span style="color: #ff3b30;">*</span>'
@@ -330,41 +343,32 @@ export class FlasherApp {
                         </label>
                         <input
                             type="${field.type || 'text'}"
-                            id="${fieldId}"
-                            placeholder="${field.placeholder || ''}"
-                            value="${savedValue}"
+                            id="config-${field.key}"
+                            placeholder="${escapedPlaceholder}"
+                            value="${escapedValue}"
                             ${field.required ? 'required' : ''}
                             ${field.pattern ? `pattern="${field.pattern}"` : ''}
-                            data-section="${section.id}"
-                            data-field="${field.id}"
-                            data-nvs-key="${field.nvsKey || ''}">
+                            data-key="${field.key}">
                         ${field.help ? `<span class="help-text">${field.help}</span>` : ''}
                     </div>
                 `;
-            });
+            }
 
             group.innerHTML = html;
             container.appendChild(group);
-        });
+        }
 
         // Attach input listeners
-        container.querySelectorAll('[data-section][data-field]').forEach(input => {
+        container.querySelectorAll('[data-key]').forEach(input => {
             input.addEventListener('input', () => {
-                const section = input.dataset.section;
-                const field = input.dataset.field;
-                const nvsKey = input.dataset.nvsKey;
+                const key = input.dataset.key;
 
-                // Save to local config
-                if (!this.config[section]) {
-                    this.config[section] = {};
-                }
-                this.config[section][field] = input.value;
+                // Save to local config (flat structure now)
+                this.config[key] = input.value;
                 this.saveConfig();
 
                 // Update flasher config
-                if (nvsKey) {
-                    this.flasher.setConfig({ [nvsKey]: input.value });
-                }
+                this.flasher.setConfig({ [key]: input.value });
             });
         });
     }

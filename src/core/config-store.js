@@ -13,6 +13,16 @@
  * @property {string} [placeholder] - Placeholder text
  * @property {string} [default] - Default value
  * @property {boolean} [required] - Is required
+ * @property {string} [section] - Optional section grouping for UI
+ * @property {string} [pattern] - Optional regex pattern for validation
+ * @property {string} [help] - Optional help text
+ */
+
+/**
+ * @typedef {Object} ValidationResult
+ * @property {boolean} valid - Whether validation passed
+ * @property {string[]} missing - Required fields that are empty
+ * @property {Object<string, string>} errors - Field-specific validation errors
  */
 
 export class ConfigStore extends EventTarget {
@@ -23,6 +33,7 @@ export class ConfigStore extends EventTarget {
         super();
         this.config = { ...initialConfig };
         this.schema = null;
+        this._listeners = new Map(); // Track listeners for cleanup
     }
 
     /**
@@ -119,22 +130,73 @@ export class ConfigStore extends EventTarget {
     }
 
     /**
-     * Check if config is valid (all required fields present)
-     * @returns {{valid: boolean, missing: string[]}}
+     * Check if config is valid (all required fields present, patterns match)
+     * @returns {ValidationResult}
      */
     validate() {
         if (!this.schema) {
-            return { valid: true, missing: [] };
+            return { valid: true, missing: [], errors: {} };
         }
 
-        const missing = this.schema
-            .filter(field => field.required && !this.config[field.key])
-            .map(field => field.key);
+        const missing = [];
+        const errors = {};
+
+        for (const field of this.schema) {
+            const value = this.config[field.key];
+            const isEmpty = value === undefined || value === null || value === '';
+
+            // Check required fields
+            if (field.required && isEmpty) {
+                missing.push(field.key);
+                errors[field.key] = `${field.label || field.key} is required`;
+                continue;
+            }
+
+            // Skip pattern validation for empty optional fields
+            if (isEmpty) continue;
+
+            // Validate pattern if specified
+            if (field.pattern) {
+                const regex = new RegExp(field.pattern);
+                if (!regex.test(String(value))) {
+                    errors[field.key] = `${field.label || field.key} format is invalid`;
+                }
+            }
+
+            // Type-specific validation
+            if (field.type === 'number') {
+                const num = Number(value);
+                if (isNaN(num)) {
+                    errors[field.key] = `${field.label || field.key} must be a number`;
+                }
+            }
+        }
 
         return {
-            valid: missing.length === 0,
-            missing
+            valid: missing.length === 0 && Object.keys(errors).length === 0,
+            missing,
+            errors
         };
+    }
+
+    /**
+     * Check if a specific key exists in the schema
+     * @param {string} key - Field key to check
+     * @returns {boolean}
+     */
+    hasField(key) {
+        if (!this.schema) return true; // No schema = accept anything
+        return this.schema.some(field => field.key === key);
+    }
+
+    /**
+     * Get field definition by key
+     * @param {string} key - Field key
+     * @returns {FieldDefinition|null}
+     */
+    getField(key) {
+        if (!this.schema) return null;
+        return this.schema.find(field => field.key === key) || null;
     }
 
     /**
@@ -218,4 +280,92 @@ export function expandFieldPresets(fields) {
     });
 
     return expanded;
+}
+
+/**
+ * Convert section-based config format to flat field definitions
+ * This bridges the legacy FlasherApp format to the core format
+ *
+ * @param {Array<{id?: string, name?: string, title?: string, description?: string, fields: Array}>} sections
+ * @returns {Array<FieldDefinition>}
+ *
+ * @example
+ * // Input (legacy FlasherApp format):
+ * [{
+ *   id: 'wifi',
+ *   title: 'WiFi Settings',
+ *   fields: [
+ *     { id: 'ssid', nvsKey: 'wifi_ssid', label: 'SSID', required: true }
+ *   ]
+ * }]
+ *
+ * // Output (core format):
+ * [{ key: 'wifi_ssid', label: 'SSID', required: true, section: 'wifi' }]
+ */
+export function flattenConfigSections(sections) {
+    if (!sections || !Array.isArray(sections)) {
+        return [];
+    }
+
+    const fields = [];
+
+    for (const section of sections) {
+        const sectionId = section.id || section.name || section.title || 'default';
+        const sectionTitle = section.title || section.name || sectionId;
+
+        if (!section.fields || !Array.isArray(section.fields)) {
+            continue;
+        }
+
+        for (const field of section.fields) {
+            // Support both nvsKey (legacy) and key (standard) formats
+            const key = field.nvsKey || field.key;
+            if (!key) continue;
+
+            fields.push({
+                key,
+                label: field.label || key,
+                type: field.type || 'text',
+                placeholder: field.placeholder,
+                default: field.default,
+                required: field.required || false,
+                pattern: field.pattern,
+                help: field.help,
+                section: sectionId,
+                sectionTitle
+            });
+        }
+    }
+
+    return fields;
+}
+
+/**
+ * Group flat field definitions by section for UI rendering
+ * @param {Array<FieldDefinition>} fields - Flat field definitions
+ * @returns {Array<{id: string, title: string, fields: Array<FieldDefinition>}>}
+ */
+export function groupFieldsBySection(fields) {
+    if (!fields || !Array.isArray(fields)) {
+        return [];
+    }
+
+    const sectionMap = new Map();
+
+    for (const field of fields) {
+        const sectionId = field.section || 'default';
+        const sectionTitle = field.sectionTitle || sectionId;
+
+        if (!sectionMap.has(sectionId)) {
+            sectionMap.set(sectionId, {
+                id: sectionId,
+                title: sectionTitle,
+                fields: []
+            });
+        }
+
+        sectionMap.get(sectionId).fields.push(field);
+    }
+
+    return Array.from(sectionMap.values());
 }

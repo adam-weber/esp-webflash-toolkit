@@ -404,161 +404,162 @@ class PartitionTableGenerator {
     }
 
     /**
-     * Calculate MD5 hash using Web Crypto API
+     * Calculate MD5 hash
      * @param {Uint8Array} data - Data to hash
-     * @returns {Promise<Uint8Array>} - MD5 hash (16 bytes)
-     */
-    async calculateMD5Async(data) {
-        // Web Crypto API doesn't support MD5, so we need a JS implementation
-        // For now, use a simple implementation
-        return this.calculateMD5(data);
-    }
-
-    /**
-     * Calculate MD5 hash (simple implementation)
-     * Based on: https://github.com/satazor/js-spark-md5
+     * @returns {Uint8Array} - MD5 hash (16 bytes)
+     *
+     * Implementation verified against RFC 1321 test vectors:
+     * - MD5("") = d41d8cd98f00b204e9800998ecf8427e
+     * - MD5("a") = 0cc175b9c0f1b6a831c399e269772661
+     * - MD5("abc") = 900150983cd24fb0d6963f7d28e17f72
+     * - MD5("message digest") = f96b697d7cb7938d525a2f31aaf161d0
      */
     calculateMD5(data) {
-        // This is a placeholder - in production, use a proper MD5 library
-        // For now, implement a basic MD5 or use spark-md5
-        return this.md5(data);
+        return this._md5Core(data);
     }
 
     /**
-     * Simple MD5 implementation for client-side use
-     * Reference: https://www.ietf.org/rfc/rfc1321.txt
+     * MD5 hash implementation following RFC 1321
+     * This is a complete, correct implementation suitable for partition table checksums.
+     *
+     * @private
+     * @param {Uint8Array} data - Input data
+     * @returns {Uint8Array} - 16-byte MD5 hash
      */
-    md5(data) {
-        // MD5 implementation (simplified)
-        // In production, you should use a well-tested library like spark-md5
-
-        const hexChars = '0123456789abcdef';
-
+    _md5Core(data) {
+        // Helper functions
         function add32(a, b) {
             return (a + b) & 0xFFFFFFFF;
         }
 
-        function cmn(q, a, b, x, s, t) {
-            a = add32(add32(a, q), add32(x, t));
-            return add32((a << s) | (a >>> (32 - s)), b);
+        function rotl(x, n) {
+            return ((x << n) | (x >>> (32 - n))) >>> 0;
         }
 
-        function ff(a, b, c, d, x, s, t) {
-            return cmn((b & c) | ((~b) & d), a, b, x, s, t);
+        function F(x, y, z) { return (x & y) | (~x & z); }
+        function G(x, y, z) { return (x & z) | (y & ~z); }
+        function H(x, y, z) { return x ^ y ^ z; }
+        function I(x, y, z) { return y ^ (x | ~z); }
+
+        function step(fn, a, b, c, d, x, s, t) {
+            return add32(rotl(add32(add32(a, fn(b, c, d)), add32(x, t)), s), b);
         }
 
-        function gg(a, b, c, d, x, s, t) {
-            return cmn((b & d) | (c & (~d)), a, b, x, s, t);
-        }
-
-        function hh(a, b, c, d, x, s, t) {
-            return cmn(b ^ c ^ d, a, b, x, s, t);
-        }
-
-        function ii(a, b, c, d, x, s, t) {
-            return cmn(c ^ (b | (~d)), a, b, x, s, t);
-        }
-
-        // Padding
+        // Pre-processing: adding padding bits
         const msgLen = data.length;
-        const padLen = ((msgLen + 8) >>> 6 << 4) + 14;
-        const padded = new Uint8Array((padLen + 2) * 4);
+        // Message length in bits (as 64-bit value, but we only use low 32 bits for now)
+        const bitLen = msgLen * 8;
+
+        // Padding: message + 1 bit + zeros + 64-bit length
+        // Total length must be congruent to 448 mod 512 (56 mod 64 bytes)
+        const padLen = (msgLen % 64 < 56) ? (56 - msgLen % 64) : (120 - msgLen % 64);
+        const totalLen = msgLen + padLen + 8;
+
+        const padded = new Uint8Array(totalLen);
         padded.set(data);
-        padded[msgLen] = 0x80;
+        padded[msgLen] = 0x80;  // Append bit '1'
 
-        // Append length in bits
+        // Append original length in bits as 64-bit little-endian
         const view = new DataView(padded.buffer);
-        view.setUint32((padLen + 1) * 4, msgLen * 8, true);
+        view.setUint32(totalLen - 8, bitLen >>> 0, true);       // Low 32 bits
+        view.setUint32(totalLen - 4, Math.floor(bitLen / 0x100000000), true);  // High 32 bits
 
-        // Process 512-bit blocks
+        // Initialize hash values
         let a = 0x67452301;
         let b = 0xEFCDAB89;
         let c = 0x98BADCFE;
         let d = 0x10325476;
 
-        for (let i = 0; i < padded.length; i += 64) {
+        // Process each 64-byte (512-bit) block
+        for (let i = 0; i < totalLen; i += 64) {
             const aa = a, bb = b, cc = c, dd = d;
-            const x = new Uint32Array(16);
 
+            // Load block into 16 32-bit words (little-endian)
+            const x = new Uint32Array(16);
             for (let j = 0; j < 16; j++) {
                 x[j] = view.getUint32(i + j * 4, true);
             }
 
-            a = ff(a, b, c, d, x[0], 7, 0xD76AA478);
-            d = ff(d, a, b, c, x[1], 12, 0xE8C7B756);
-            c = ff(c, d, a, b, x[2], 17, 0x242070DB);
-            b = ff(b, c, d, a, x[3], 22, 0xC1BDCEEE);
-            a = ff(a, b, c, d, x[4], 7, 0xF57C0FAF);
-            d = ff(d, a, b, c, x[5], 12, 0x4787C62A);
-            c = ff(c, d, a, b, x[6], 17, 0xA8304613);
-            b = ff(b, c, d, a, x[7], 22, 0xFD469501);
-            a = ff(a, b, c, d, x[8], 7, 0x698098D8);
-            d = ff(d, a, b, c, x[9], 12, 0x8B44F7AF);
-            c = ff(c, d, a, b, x[10], 17, 0xFFFF5BB1);
-            b = ff(b, c, d, a, x[11], 22, 0x895CD7BE);
-            a = ff(a, b, c, d, x[12], 7, 0x6B901122);
-            d = ff(d, a, b, c, x[13], 12, 0xFD987193);
-            c = ff(c, d, a, b, x[14], 17, 0xA679438E);
-            b = ff(b, c, d, a, x[15], 22, 0x49B40821);
+            // Round 1
+            a = step(F, a, b, c, d, x[0],  7,  0xd76aa478);
+            d = step(F, d, a, b, c, x[1],  12, 0xe8c7b756);
+            c = step(F, c, d, a, b, x[2],  17, 0x242070db);
+            b = step(F, b, c, d, a, x[3],  22, 0xc1bdceee);
+            a = step(F, a, b, c, d, x[4],  7,  0xf57c0faf);
+            d = step(F, d, a, b, c, x[5],  12, 0x4787c62a);
+            c = step(F, c, d, a, b, x[6],  17, 0xa8304613);
+            b = step(F, b, c, d, a, x[7],  22, 0xfd469501);
+            a = step(F, a, b, c, d, x[8],  7,  0x698098d8);
+            d = step(F, d, a, b, c, x[9],  12, 0x8b44f7af);
+            c = step(F, c, d, a, b, x[10], 17, 0xffff5bb1);
+            b = step(F, b, c, d, a, x[11], 22, 0x895cd7be);
+            a = step(F, a, b, c, d, x[12], 7,  0x6b901122);
+            d = step(F, d, a, b, c, x[13], 12, 0xfd987193);
+            c = step(F, c, d, a, b, x[14], 17, 0xa679438e);
+            b = step(F, b, c, d, a, x[15], 22, 0x49b40821);
 
-            a = gg(a, b, c, d, x[1], 5, 0xF61E2562);
-            d = gg(d, a, b, c, x[6], 9, 0xC040B340);
-            c = gg(c, d, a, b, x[11], 14, 0x265E5A51);
-            b = gg(b, c, d, a, x[0], 20, 0xE9B6C7AA);
-            a = gg(a, b, c, d, x[5], 5, 0xD62F105D);
-            d = gg(d, a, b, c, x[10], 9, 0x02441453);
-            c = gg(c, d, a, b, x[15], 14, 0xD8A1E681);
-            b = gg(b, c, d, a, x[4], 20, 0xE7D3FBC8);
-            a = gg(a, b, c, d, x[9], 5, 0x21E1CDE6);
-            d = gg(d, a, b, c, x[14], 9, 0xC33707D6);
-            c = gg(c, d, a, b, x[3], 14, 0xF4D50D87);
-            b = gg(b, c, d, a, x[8], 20, 0x455A14ED);
-            a = gg(a, b, c, d, x[13], 5, 0xA9E3E905);
-            d = gg(d, a, b, c, x[2], 9, 0xFCEFA3F8);
-            c = gg(c, d, a, b, x[7], 14, 0x676F02D9);
-            b = gg(b, c, d, a, x[12], 20, 0x8D2A4C8A);
+            // Round 2
+            a = step(G, a, b, c, d, x[1],  5,  0xf61e2562);
+            d = step(G, d, a, b, c, x[6],  9,  0xc040b340);
+            c = step(G, c, d, a, b, x[11], 14, 0x265e5a51);
+            b = step(G, b, c, d, a, x[0],  20, 0xe9b6c7aa);
+            a = step(G, a, b, c, d, x[5],  5,  0xd62f105d);
+            d = step(G, d, a, b, c, x[10], 9,  0x02441453);
+            c = step(G, c, d, a, b, x[15], 14, 0xd8a1e681);
+            b = step(G, b, c, d, a, x[4],  20, 0xe7d3fbc8);
+            a = step(G, a, b, c, d, x[9],  5,  0x21e1cde6);
+            d = step(G, d, a, b, c, x[14], 9,  0xc33707d6);
+            c = step(G, c, d, a, b, x[3],  14, 0xf4d50d87);
+            b = step(G, b, c, d, a, x[8],  20, 0x455a14ed);
+            a = step(G, a, b, c, d, x[13], 5,  0xa9e3e905);
+            d = step(G, d, a, b, c, x[2],  9,  0xfcefa3f8);
+            c = step(G, c, d, a, b, x[7],  14, 0x676f02d9);
+            b = step(G, b, c, d, a, x[12], 20, 0x8d2a4c8a);
 
-            a = hh(a, b, c, d, x[5], 4, 0xFFFA3942);
-            d = hh(d, a, b, c, x[8], 11, 0x8771F681);
-            c = hh(c, d, a, b, x[11], 16, 0x6D9D6122);
-            b = hh(b, c, d, a, x[14], 23, 0xFDE5380C);
-            a = hh(a, b, c, d, x[1], 4, 0xA4BEEA44);
-            d = hh(d, a, b, c, x[4], 11, 0x4BDECFA9);
-            c = hh(c, d, a, b, x[7], 16, 0xF6BB4B60);
-            b = hh(b, c, d, a, x[10], 23, 0xBEBFBC70);
-            a = hh(a, b, c, d, x[13], 4, 0x289B7EC6);
-            d = hh(d, a, b, c, x[0], 11, 0xEAA127FA);
-            c = hh(c, d, a, b, x[3], 16, 0xD4EF3085);
-            b = hh(b, c, d, a, x[6], 23, 0x04881D05);
-            a = hh(a, b, c, d, x[9], 4, 0xD9D4D039);
-            d = hh(d, a, b, c, x[12], 11, 0xE6DB99E5);
-            c = hh(c, d, a, b, x[15], 16, 0x1FA27CF8);
-            b = hh(b, c, d, a, x[2], 23, 0xC4AC5665);
+            // Round 3
+            a = step(H, a, b, c, d, x[5],  4,  0xfffa3942);
+            d = step(H, d, a, b, c, x[8],  11, 0x8771f681);
+            c = step(H, c, d, a, b, x[11], 16, 0x6d9d6122);
+            b = step(H, b, c, d, a, x[14], 23, 0xfde5380c);
+            a = step(H, a, b, c, d, x[1],  4,  0xa4beea44);
+            d = step(H, d, a, b, c, x[4],  11, 0x4bdecfa9);
+            c = step(H, c, d, a, b, x[7],  16, 0xf6bb4b60);
+            b = step(H, b, c, d, a, x[10], 23, 0xbebfbc70);
+            a = step(H, a, b, c, d, x[13], 4,  0x289b7ec6);
+            d = step(H, d, a, b, c, x[0],  11, 0xeaa127fa);
+            c = step(H, c, d, a, b, x[3],  16, 0xd4ef3085);
+            b = step(H, b, c, d, a, x[6],  23, 0x04881d05);
+            a = step(H, a, b, c, d, x[9],  4,  0xd9d4d039);
+            d = step(H, d, a, b, c, x[12], 11, 0xe6db99e5);
+            c = step(H, c, d, a, b, x[15], 16, 0x1fa27cf8);
+            b = step(H, b, c, d, a, x[2],  23, 0xc4ac5665);
 
-            a = ii(a, b, c, d, x[0], 6, 0xF4292244);
-            d = ii(d, a, b, c, x[7], 10, 0x432AFF97);
-            c = ii(c, d, a, b, x[14], 15, 0xAB9423A7);
-            b = ii(b, c, d, a, x[5], 21, 0xFC93A039);
-            a = ii(a, b, c, d, x[12], 6, 0x655B59C3);
-            d = ii(d, a, b, c, x[3], 10, 0x8F0CCC92);
-            c = ii(c, d, a, b, x[10], 15, 0xFFEFF47D);
-            b = ii(b, c, d, a, x[1], 21, 0x85845DD1);
-            a = ii(a, b, c, d, x[8], 6, 0x6FA87E4F);
-            d = ii(d, a, b, c, x[15], 10, 0xFE2CE6E0);
-            c = ii(c, d, a, b, x[6], 15, 0xA3014314);
-            b = ii(b, c, d, a, x[13], 21, 0x4E0811A1);
-            a = ii(a, b, c, d, x[4], 6, 0xF7537E82);
-            d = ii(d, a, b, c, x[11], 10, 0xBD3AF235);
-            c = ii(c, d, a, b, x[2], 15, 0x2AD7D2BB);
-            b = ii(b, c, d, a, x[9], 21, 0xEB86D391);
+            // Round 4
+            a = step(I, a, b, c, d, x[0],  6,  0xf4292244);
+            d = step(I, d, a, b, c, x[7],  10, 0x432aff97);
+            c = step(I, c, d, a, b, x[14], 15, 0xab9423a7);
+            b = step(I, b, c, d, a, x[5],  21, 0xfc93a039);
+            a = step(I, a, b, c, d, x[12], 6,  0x655b59c3);
+            d = step(I, d, a, b, c, x[3],  10, 0x8f0ccc92);
+            c = step(I, c, d, a, b, x[10], 15, 0xffeff47d);
+            b = step(I, b, c, d, a, x[1],  21, 0x85845dd1);
+            a = step(I, a, b, c, d, x[8],  6,  0x6fa87e4f);
+            d = step(I, d, a, b, c, x[15], 10, 0xfe2ce6e0);
+            c = step(I, c, d, a, b, x[6],  15, 0xa3014314);
+            b = step(I, b, c, d, a, x[13], 21, 0x4e0811a1);
+            a = step(I, a, b, c, d, x[4],  6,  0xf7537e82);
+            d = step(I, d, a, b, c, x[11], 10, 0xbd3af235);
+            c = step(I, c, d, a, b, x[2],  15, 0x2ad7d2bb);
+            b = step(I, b, c, d, a, x[9],  21, 0xeb86d391);
 
+            // Add this block's hash to result so far
             a = add32(a, aa);
             b = add32(b, bb);
             c = add32(c, cc);
             d = add32(d, dd);
         }
 
-        // Convert to bytes (little-endian)
+        // Output hash (little-endian)
         const hash = new Uint8Array(16);
         const hashView = new DataView(hash.buffer);
         hashView.setUint32(0, a, true);
@@ -567,6 +568,35 @@ class PartitionTableGenerator {
         hashView.setUint32(12, d, true);
 
         return hash;
+    }
+
+    /**
+     * Verify MD5 implementation against known test vectors
+     * Call this to validate the implementation is correct
+     * @returns {boolean} - True if all test vectors pass
+     */
+    static verifyMD5() {
+        const gen = new PartitionTableGenerator();
+        const encoder = new TextEncoder();
+
+        const testVectors = [
+            { input: '', expected: 'd41d8cd98f00b204e9800998ecf8427e' },
+            { input: 'a', expected: '0cc175b9c0f1b6a831c399e269772661' },
+            { input: 'abc', expected: '900150983cd24fb0d6963f7d28e17f72' },
+            { input: 'message digest', expected: 'f96b697d7cb7938d525a2f31aaf161d0' },
+            { input: 'abcdefghijklmnopqrstuvwxyz', expected: 'c3fcd3d76192e4007dfb496cca67e13b' }
+        ];
+
+        for (const { input, expected } of testVectors) {
+            const data = encoder.encode(input);
+            const hash = gen.calculateMD5(data);
+            const hashHex = Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
+            if (hashHex !== expected) {
+                console.error(`MD5 verification failed for "${input}": got ${hashHex}, expected ${expected}`);
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -604,9 +634,6 @@ class PartitionTableGenerator {
     }
 }
 
-// Expose to browser global scope and for module exports
-if (typeof window !== 'undefined') {
-    window.PartitionTableGenerator = PartitionTableGenerator;
-}
+// Browser globals are handled by IIFE bundle
 
 export { PartitionTableGenerator };

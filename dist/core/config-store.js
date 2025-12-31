@@ -6,6 +6,7 @@ class ConfigStore extends EventTarget {
     super();
     this.config = { ...initialConfig };
     this.schema = null;
+    this._listeners = /* @__PURE__ */ new Map();
   }
   /**
    * Emit a typed event
@@ -85,18 +86,60 @@ class ConfigStore extends EventTarget {
     this.emit("clear", { oldConfig });
   }
   /**
-   * Check if config is valid (all required fields present)
-   * @returns {{valid: boolean, missing: string[]}}
+   * Check if config is valid (all required fields present, patterns match)
+   * @returns {ValidationResult}
    */
   validate() {
     if (!this.schema) {
-      return { valid: true, missing: [] };
+      return { valid: true, missing: [], errors: {} };
     }
-    const missing = this.schema.filter((field) => field.required && !this.config[field.key]).map((field) => field.key);
+    const missing = [];
+    const errors = {};
+    for (const field of this.schema) {
+      const value = this.config[field.key];
+      const isEmpty = value === void 0 || value === null || value === "";
+      if (field.required && isEmpty) {
+        missing.push(field.key);
+        errors[field.key] = `${field.label || field.key} is required`;
+        continue;
+      }
+      if (isEmpty) continue;
+      if (field.pattern) {
+        const regex = new RegExp(field.pattern);
+        if (!regex.test(String(value))) {
+          errors[field.key] = `${field.label || field.key} format is invalid`;
+        }
+      }
+      if (field.type === "number") {
+        const num = Number(value);
+        if (isNaN(num)) {
+          errors[field.key] = `${field.label || field.key} must be a number`;
+        }
+      }
+    }
     return {
-      valid: missing.length === 0,
-      missing
+      valid: missing.length === 0 && Object.keys(errors).length === 0,
+      missing,
+      errors
     };
+  }
+  /**
+   * Check if a specific key exists in the schema
+   * @param {string} key - Field key to check
+   * @returns {boolean}
+   */
+  hasField(key) {
+    if (!this.schema) return true;
+    return this.schema.some((field) => field.key === key);
+  }
+  /**
+   * Get field definition by key
+   * @param {string} key - Field key
+   * @returns {FieldDefinition|null}
+   */
+  getField(key) {
+    if (!this.schema) return null;
+    return this.schema.find((field) => field.key === key) || null;
   }
   /**
    * Get config formatted for NVS generation
@@ -160,9 +203,60 @@ function expandFieldPresets(fields) {
   });
   return expanded;
 }
+function flattenConfigSections(sections) {
+  if (!sections || !Array.isArray(sections)) {
+    return [];
+  }
+  const fields = [];
+  for (const section of sections) {
+    const sectionId = section.id || section.name || section.title || "default";
+    const sectionTitle = section.title || section.name || sectionId;
+    if (!section.fields || !Array.isArray(section.fields)) {
+      continue;
+    }
+    for (const field of section.fields) {
+      const key = field.nvsKey || field.key;
+      if (!key) continue;
+      fields.push({
+        key,
+        label: field.label || key,
+        type: field.type || "text",
+        placeholder: field.placeholder,
+        default: field.default,
+        required: field.required || false,
+        pattern: field.pattern,
+        help: field.help,
+        section: sectionId,
+        sectionTitle
+      });
+    }
+  }
+  return fields;
+}
+function groupFieldsBySection(fields) {
+  if (!fields || !Array.isArray(fields)) {
+    return [];
+  }
+  const sectionMap = /* @__PURE__ */ new Map();
+  for (const field of fields) {
+    const sectionId = field.section || "default";
+    const sectionTitle = field.sectionTitle || sectionId;
+    if (!sectionMap.has(sectionId)) {
+      sectionMap.set(sectionId, {
+        id: sectionId,
+        title: sectionTitle,
+        fields: []
+      });
+    }
+    sectionMap.get(sectionId).fields.push(field);
+  }
+  return Array.from(sectionMap.values());
+}
 export {
   ConfigStore,
   FieldPresets,
-  expandFieldPresets
+  expandFieldPresets,
+  flattenConfigSections,
+  groupFieldsBySection
 };
 //# sourceMappingURL=config-store.js.map

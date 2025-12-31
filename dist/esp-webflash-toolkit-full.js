@@ -679,6 +679,7 @@ var ESPWebFlash = (() => {
       super();
       this.config = { ...initialConfig };
       this.schema = null;
+      this._listeners = /* @__PURE__ */ new Map();
     }
     /**
      * Emit a typed event
@@ -758,18 +759,60 @@ var ESPWebFlash = (() => {
       this.emit("clear", { oldConfig });
     }
     /**
-     * Check if config is valid (all required fields present)
-     * @returns {{valid: boolean, missing: string[]}}
+     * Check if config is valid (all required fields present, patterns match)
+     * @returns {ValidationResult}
      */
     validate() {
       if (!this.schema) {
-        return { valid: true, missing: [] };
+        return { valid: true, missing: [], errors: {} };
       }
-      const missing = this.schema.filter((field) => field.required && !this.config[field.key]).map((field) => field.key);
+      const missing = [];
+      const errors = {};
+      for (const field of this.schema) {
+        const value = this.config[field.key];
+        const isEmpty = value === void 0 || value === null || value === "";
+        if (field.required && isEmpty) {
+          missing.push(field.key);
+          errors[field.key] = `${field.label || field.key} is required`;
+          continue;
+        }
+        if (isEmpty) continue;
+        if (field.pattern) {
+          const regex = new RegExp(field.pattern);
+          if (!regex.test(String(value))) {
+            errors[field.key] = `${field.label || field.key} format is invalid`;
+          }
+        }
+        if (field.type === "number") {
+          const num = Number(value);
+          if (isNaN(num)) {
+            errors[field.key] = `${field.label || field.key} must be a number`;
+          }
+        }
+      }
       return {
-        valid: missing.length === 0,
-        missing
+        valid: missing.length === 0 && Object.keys(errors).length === 0,
+        missing,
+        errors
       };
+    }
+    /**
+     * Check if a specific key exists in the schema
+     * @param {string} key - Field key to check
+     * @returns {boolean}
+     */
+    hasField(key) {
+      if (!this.schema) return true;
+      return this.schema.some((field) => field.key === key);
+    }
+    /**
+     * Get field definition by key
+     * @param {string} key - Field key
+     * @returns {FieldDefinition|null}
+     */
+    getField(key) {
+      if (!this.schema) return null;
+      return this.schema.find((field) => field.key === key) || null;
     }
     /**
      * Get config formatted for NVS generation
@@ -833,9 +876,58 @@ var ESPWebFlash = (() => {
     });
     return expanded;
   }
+  function flattenConfigSections(sections) {
+    if (!sections || !Array.isArray(sections)) {
+      return [];
+    }
+    const fields = [];
+    for (const section of sections) {
+      const sectionId = section.id || section.name || section.title || "default";
+      const sectionTitle = section.title || section.name || sectionId;
+      if (!section.fields || !Array.isArray(section.fields)) {
+        continue;
+      }
+      for (const field of section.fields) {
+        const key = field.nvsKey || field.key;
+        if (!key) continue;
+        fields.push({
+          key,
+          label: field.label || key,
+          type: field.type || "text",
+          placeholder: field.placeholder,
+          default: field.default,
+          required: field.required || false,
+          pattern: field.pattern,
+          help: field.help,
+          section: sectionId,
+          sectionTitle
+        });
+      }
+    }
+    return fields;
+  }
+  function groupFieldsBySection(fields) {
+    if (!fields || !Array.isArray(fields)) {
+      return [];
+    }
+    const sectionMap = /* @__PURE__ */ new Map();
+    for (const field of fields) {
+      const sectionId = field.section || "default";
+      const sectionTitle = field.sectionTitle || sectionId;
+      if (!sectionMap.has(sectionId)) {
+        sectionMap.set(sectionId, {
+          id: sectionId,
+          title: sectionTitle,
+          fields: []
+        });
+      }
+      sectionMap.get(sectionId).fields.push(field);
+    }
+    return Array.from(sectionMap.values());
+  }
 
   // src/core/partition-table-generator.js
-  var PartitionTableGenerator = class {
+  var PartitionTableGenerator = class _PartitionTableGenerator {
     constructor() {
       this.PARTITION_TABLE_SIZE = 4096;
       this.MAX_PARTITION_LENGTH = 3072;
@@ -1126,126 +1218,133 @@ var ESPWebFlash = (() => {
       return `0x${subtype.toString(16)}`;
     }
     /**
-     * Calculate MD5 hash using Web Crypto API
+     * Calculate MD5 hash
      * @param {Uint8Array} data - Data to hash
-     * @returns {Promise<Uint8Array>} - MD5 hash (16 bytes)
-     */
-    async calculateMD5Async(data) {
-      return this.calculateMD5(data);
-    }
-    /**
-     * Calculate MD5 hash (simple implementation)
-     * Based on: https://github.com/satazor/js-spark-md5
+     * @returns {Uint8Array} - MD5 hash (16 bytes)
+     *
+     * Implementation verified against RFC 1321 test vectors:
+     * - MD5("") = d41d8cd98f00b204e9800998ecf8427e
+     * - MD5("a") = 0cc175b9c0f1b6a831c399e269772661
+     * - MD5("abc") = 900150983cd24fb0d6963f7d28e17f72
+     * - MD5("message digest") = f96b697d7cb7938d525a2f31aaf161d0
      */
     calculateMD5(data) {
-      return this.md5(data);
+      return this._md5Core(data);
     }
     /**
-     * Simple MD5 implementation for client-side use
-     * Reference: https://www.ietf.org/rfc/rfc1321.txt
+     * MD5 hash implementation following RFC 1321
+     * This is a complete, correct implementation suitable for partition table checksums.
+     *
+     * @private
+     * @param {Uint8Array} data - Input data
+     * @returns {Uint8Array} - 16-byte MD5 hash
      */
-    md5(data) {
-      const hexChars = "0123456789abcdef";
+    _md5Core(data) {
       function add32(a2, b2) {
         return a2 + b2 & 4294967295;
       }
-      function cmn(q, a2, b2, x, s, t) {
-        a2 = add32(add32(a2, q), add32(x, t));
-        return add32(a2 << s | a2 >>> 32 - s, b2);
+      function rotl(x, n) {
+        return (x << n | x >>> 32 - n) >>> 0;
       }
-      function ff(a2, b2, c2, d2, x, s, t) {
-        return cmn(b2 & c2 | ~b2 & d2, a2, b2, x, s, t);
+      function F(x, y, z) {
+        return x & y | ~x & z;
       }
-      function gg(a2, b2, c2, d2, x, s, t) {
-        return cmn(b2 & d2 | c2 & ~d2, a2, b2, x, s, t);
+      function G(x, y, z) {
+        return x & z | y & ~z;
       }
-      function hh(a2, b2, c2, d2, x, s, t) {
-        return cmn(b2 ^ c2 ^ d2, a2, b2, x, s, t);
+      function H(x, y, z) {
+        return x ^ y ^ z;
       }
-      function ii(a2, b2, c2, d2, x, s, t) {
-        return cmn(c2 ^ (b2 | ~d2), a2, b2, x, s, t);
+      function I(x, y, z) {
+        return y ^ (x | ~z);
+      }
+      function step(fn, a2, b2, c2, d2, x, s, t) {
+        return add32(rotl(add32(add32(a2, fn(b2, c2, d2)), add32(x, t)), s), b2);
       }
       const msgLen = data.length;
-      const padLen = (msgLen + 8 >>> 6 << 4) + 14;
-      const padded = new Uint8Array((padLen + 2) * 4);
+      const bitLen = msgLen * 8;
+      const padLen = msgLen % 64 < 56 ? 56 - msgLen % 64 : 120 - msgLen % 64;
+      const totalLen = msgLen + padLen + 8;
+      const padded = new Uint8Array(totalLen);
       padded.set(data);
       padded[msgLen] = 128;
       const view = new DataView(padded.buffer);
-      view.setUint32((padLen + 1) * 4, msgLen * 8, true);
+      view.setUint32(totalLen - 8, bitLen >>> 0, true);
+      view.setUint32(totalLen - 4, Math.floor(bitLen / 4294967296), true);
       let a = 1732584193;
       let b = 4023233417;
       let c = 2562383102;
       let d = 271733878;
-      for (let i = 0; i < padded.length; i += 64) {
+      for (let i = 0; i < totalLen; i += 64) {
         const aa = a, bb = b, cc = c, dd = d;
         const x = new Uint32Array(16);
         for (let j = 0; j < 16; j++) {
           x[j] = view.getUint32(i + j * 4, true);
         }
-        a = ff(a, b, c, d, x[0], 7, 3614090360);
-        d = ff(d, a, b, c, x[1], 12, 3905402710);
-        c = ff(c, d, a, b, x[2], 17, 606105819);
-        b = ff(b, c, d, a, x[3], 22, 3250441966);
-        a = ff(a, b, c, d, x[4], 7, 4118548399);
-        d = ff(d, a, b, c, x[5], 12, 1200080426);
-        c = ff(c, d, a, b, x[6], 17, 2821735955);
-        b = ff(b, c, d, a, x[7], 22, 4249261313);
-        a = ff(a, b, c, d, x[8], 7, 1770035416);
-        d = ff(d, a, b, c, x[9], 12, 2336552879);
-        c = ff(c, d, a, b, x[10], 17, 4294925233);
-        b = ff(b, c, d, a, x[11], 22, 2304563134);
-        a = ff(a, b, c, d, x[12], 7, 1804603682);
-        d = ff(d, a, b, c, x[13], 12, 4254626195);
-        c = ff(c, d, a, b, x[14], 17, 2792965006);
-        b = ff(b, c, d, a, x[15], 22, 1236535329);
-        a = gg(a, b, c, d, x[1], 5, 4129170786);
-        d = gg(d, a, b, c, x[6], 9, 3225465664);
-        c = gg(c, d, a, b, x[11], 14, 643717713);
-        b = gg(b, c, d, a, x[0], 20, 3921069994);
-        a = gg(a, b, c, d, x[5], 5, 3593408605);
-        d = gg(d, a, b, c, x[10], 9, 38016083);
-        c = gg(c, d, a, b, x[15], 14, 3634488961);
-        b = gg(b, c, d, a, x[4], 20, 3889429448);
-        a = gg(a, b, c, d, x[9], 5, 568446438);
-        d = gg(d, a, b, c, x[14], 9, 3275163606);
-        c = gg(c, d, a, b, x[3], 14, 4107603335);
-        b = gg(b, c, d, a, x[8], 20, 1163531501);
-        a = gg(a, b, c, d, x[13], 5, 2850285829);
-        d = gg(d, a, b, c, x[2], 9, 4243563512);
-        c = gg(c, d, a, b, x[7], 14, 1735328473);
-        b = gg(b, c, d, a, x[12], 20, 2368359562);
-        a = hh(a, b, c, d, x[5], 4, 4294588738);
-        d = hh(d, a, b, c, x[8], 11, 2272392833);
-        c = hh(c, d, a, b, x[11], 16, 1839030562);
-        b = hh(b, c, d, a, x[14], 23, 4259657740);
-        a = hh(a, b, c, d, x[1], 4, 2763975236);
-        d = hh(d, a, b, c, x[4], 11, 1272893353);
-        c = hh(c, d, a, b, x[7], 16, 4139469664);
-        b = hh(b, c, d, a, x[10], 23, 3200236656);
-        a = hh(a, b, c, d, x[13], 4, 681279174);
-        d = hh(d, a, b, c, x[0], 11, 3936430074);
-        c = hh(c, d, a, b, x[3], 16, 3572445317);
-        b = hh(b, c, d, a, x[6], 23, 76029189);
-        a = hh(a, b, c, d, x[9], 4, 3654602809);
-        d = hh(d, a, b, c, x[12], 11, 3873151461);
-        c = hh(c, d, a, b, x[15], 16, 530742520);
-        b = hh(b, c, d, a, x[2], 23, 3299628645);
-        a = ii(a, b, c, d, x[0], 6, 4096336452);
-        d = ii(d, a, b, c, x[7], 10, 1126891415);
-        c = ii(c, d, a, b, x[14], 15, 2878612391);
-        b = ii(b, c, d, a, x[5], 21, 4237533241);
-        a = ii(a, b, c, d, x[12], 6, 1700485571);
-        d = ii(d, a, b, c, x[3], 10, 2399980690);
-        c = ii(c, d, a, b, x[10], 15, 4293915773);
-        b = ii(b, c, d, a, x[1], 21, 2240044497);
-        a = ii(a, b, c, d, x[8], 6, 1873313359);
-        d = ii(d, a, b, c, x[15], 10, 4264355552);
-        c = ii(c, d, a, b, x[6], 15, 2734768916);
-        b = ii(b, c, d, a, x[13], 21, 1309151649);
-        a = ii(a, b, c, d, x[4], 6, 4149444226);
-        d = ii(d, a, b, c, x[11], 10, 3174756917);
-        c = ii(c, d, a, b, x[2], 15, 718787259);
-        b = ii(b, c, d, a, x[9], 21, 3951481745);
+        a = step(F, a, b, c, d, x[0], 7, 3614090360);
+        d = step(F, d, a, b, c, x[1], 12, 3905402710);
+        c = step(F, c, d, a, b, x[2], 17, 606105819);
+        b = step(F, b, c, d, a, x[3], 22, 3250441966);
+        a = step(F, a, b, c, d, x[4], 7, 4118548399);
+        d = step(F, d, a, b, c, x[5], 12, 1200080426);
+        c = step(F, c, d, a, b, x[6], 17, 2821735955);
+        b = step(F, b, c, d, a, x[7], 22, 4249261313);
+        a = step(F, a, b, c, d, x[8], 7, 1770035416);
+        d = step(F, d, a, b, c, x[9], 12, 2336552879);
+        c = step(F, c, d, a, b, x[10], 17, 4294925233);
+        b = step(F, b, c, d, a, x[11], 22, 2304563134);
+        a = step(F, a, b, c, d, x[12], 7, 1804603682);
+        d = step(F, d, a, b, c, x[13], 12, 4254626195);
+        c = step(F, c, d, a, b, x[14], 17, 2792965006);
+        b = step(F, b, c, d, a, x[15], 22, 1236535329);
+        a = step(G, a, b, c, d, x[1], 5, 4129170786);
+        d = step(G, d, a, b, c, x[6], 9, 3225465664);
+        c = step(G, c, d, a, b, x[11], 14, 643717713);
+        b = step(G, b, c, d, a, x[0], 20, 3921069994);
+        a = step(G, a, b, c, d, x[5], 5, 3593408605);
+        d = step(G, d, a, b, c, x[10], 9, 38016083);
+        c = step(G, c, d, a, b, x[15], 14, 3634488961);
+        b = step(G, b, c, d, a, x[4], 20, 3889429448);
+        a = step(G, a, b, c, d, x[9], 5, 568446438);
+        d = step(G, d, a, b, c, x[14], 9, 3275163606);
+        c = step(G, c, d, a, b, x[3], 14, 4107603335);
+        b = step(G, b, c, d, a, x[8], 20, 1163531501);
+        a = step(G, a, b, c, d, x[13], 5, 2850285829);
+        d = step(G, d, a, b, c, x[2], 9, 4243563512);
+        c = step(G, c, d, a, b, x[7], 14, 1735328473);
+        b = step(G, b, c, d, a, x[12], 20, 2368359562);
+        a = step(H, a, b, c, d, x[5], 4, 4294588738);
+        d = step(H, d, a, b, c, x[8], 11, 2272392833);
+        c = step(H, c, d, a, b, x[11], 16, 1839030562);
+        b = step(H, b, c, d, a, x[14], 23, 4259657740);
+        a = step(H, a, b, c, d, x[1], 4, 2763975236);
+        d = step(H, d, a, b, c, x[4], 11, 1272893353);
+        c = step(H, c, d, a, b, x[7], 16, 4139469664);
+        b = step(H, b, c, d, a, x[10], 23, 3200236656);
+        a = step(H, a, b, c, d, x[13], 4, 681279174);
+        d = step(H, d, a, b, c, x[0], 11, 3936430074);
+        c = step(H, c, d, a, b, x[3], 16, 3572445317);
+        b = step(H, b, c, d, a, x[6], 23, 76029189);
+        a = step(H, a, b, c, d, x[9], 4, 3654602809);
+        d = step(H, d, a, b, c, x[12], 11, 3873151461);
+        c = step(H, c, d, a, b, x[15], 16, 530742520);
+        b = step(H, b, c, d, a, x[2], 23, 3299628645);
+        a = step(I, a, b, c, d, x[0], 6, 4096336452);
+        d = step(I, d, a, b, c, x[7], 10, 1126891415);
+        c = step(I, c, d, a, b, x[14], 15, 2878612391);
+        b = step(I, b, c, d, a, x[5], 21, 4237533241);
+        a = step(I, a, b, c, d, x[12], 6, 1700485571);
+        d = step(I, d, a, b, c, x[3], 10, 2399980690);
+        c = step(I, c, d, a, b, x[10], 15, 4293915773);
+        b = step(I, b, c, d, a, x[1], 21, 2240044497);
+        a = step(I, a, b, c, d, x[8], 6, 1873313359);
+        d = step(I, d, a, b, c, x[15], 10, 4264355552);
+        c = step(I, c, d, a, b, x[6], 15, 2734768916);
+        b = step(I, b, c, d, a, x[13], 21, 1309151649);
+        a = step(I, a, b, c, d, x[4], 6, 4149444226);
+        d = step(I, d, a, b, c, x[11], 10, 3174756917);
+        c = step(I, c, d, a, b, x[2], 15, 718787259);
+        b = step(I, b, c, d, a, x[9], 21, 3951481745);
         a = add32(a, aa);
         b = add32(b, bb);
         c = add32(c, cc);
@@ -1258,6 +1357,32 @@ var ESPWebFlash = (() => {
       hashView.setUint32(8, c, true);
       hashView.setUint32(12, d, true);
       return hash;
+    }
+    /**
+     * Verify MD5 implementation against known test vectors
+     * Call this to validate the implementation is correct
+     * @returns {boolean} - True if all test vectors pass
+     */
+    static verifyMD5() {
+      const gen = new _PartitionTableGenerator();
+      const encoder = new TextEncoder();
+      const testVectors = [
+        { input: "", expected: "d41d8cd98f00b204e9800998ecf8427e" },
+        { input: "a", expected: "0cc175b9c0f1b6a831c399e269772661" },
+        { input: "abc", expected: "900150983cd24fb0d6963f7d28e17f72" },
+        { input: "message digest", expected: "f96b697d7cb7938d525a2f31aaf161d0" },
+        { input: "abcdefghijklmnopqrstuvwxyz", expected: "c3fcd3d76192e4007dfb496cca67e13b" }
+      ];
+      for (const { input, expected } of testVectors) {
+        const data = encoder.encode(input);
+        const hash = gen.calculateMD5(data);
+        const hashHex = Array.from(hash).map((b) => b.toString(16).padStart(2, "0")).join("");
+        if (hashHex !== expected) {
+          console.error(`MD5 verification failed for "${input}": got ${hashHex}, expected ${expected}`);
+          return false;
+        }
+      }
+      return true;
     }
     /**
      * Get predefined partition table templates
@@ -1312,29 +1437,121 @@ var ESPWebFlash = (() => {
         nvsSize: options.nvsSize ?? 24576,
         nvsNamespace: options.nvsNamespace || "config",
         baudrate: options.baudrate || 115200,
-        timeout: options.timeout || 15e3
+        timeout: options.timeout || 15e3,
+        validateOnFlash: options.validateOnFlash !== false
       };
       this.device = new DeviceConnection();
       this.flasher = new FirmwareFlasher();
       this.config = new ConfigStore();
-      if (options.fields) {
+      this._state = {
+        status: "idle",
+        progress: 0,
+        error: null,
+        canRetry: false,
+        lastOperation: null,
+        lastOperationOptions: null
+      };
+      this._forwardedListeners = [];
+      if (options.configSections) {
+        const fields = flattenConfigSections(options.configSections);
+        this.config.setSchema(fields);
+      } else if (options.fields) {
         const fields = expandFieldPresets(options.fields);
         this.config.setSchema(fields);
       }
-      this.forwardEvents(this.device, ["log", "status", "progress", "error", "connected", "disconnected", "chip-mismatch"]);
-      this.forwardEvents(this.flasher, ["log", "status", "progress", "error", "complete"]);
-      this.forwardEvents(this.config, ["change", "schema-changed"]);
+      this._setupEventForwarding();
     }
     /**
-     * Forward events from a component to this orchestrator
+     * Set up event forwarding with cleanup tracking
      * @private
      */
-    forwardEvents(source, events) {
+    _setupEventForwarding() {
+      this._forwardEvents(this.device, ["log", "status", "progress", "error", "connected", "disconnected", "chip-mismatch"]);
+      this._forwardEvents(this.flasher, ["log", "status", "progress", "error", "complete"]);
+      this._forwardEvents(this.config, ["change", "schema-changed"]);
+    }
+    /**
+     * Forward events from a component with cleanup tracking
+     * @private
+     */
+    _forwardEvents(source, events) {
       events.forEach((event) => {
-        source.addEventListener(event, (e) => {
+        const handler = (e) => {
+          this._updateStateFromEvent(event, e.detail);
           this.dispatchEvent(new CustomEvent(event, { detail: e.detail }));
-        });
+        };
+        source.addEventListener(event, handler);
+        this._forwardedListeners.push({ source, event, handler });
       });
+    }
+    /**
+     * Update internal state based on events
+     * @private
+     */
+    _updateStateFromEvent(event, detail) {
+      switch (event) {
+        case "status":
+          this._state.status = detail.state;
+          if (detail.state === "error") {
+            this._state.error = detail.message;
+            this._state.canRetry = true;
+          } else if (detail.state === "complete") {
+            this._state.canRetry = false;
+          }
+          break;
+        case "progress":
+          this._state.progress = detail.percent;
+          break;
+        case "error":
+          this._state.status = "error";
+          this._state.error = detail.message;
+          this._state.canRetry = this._isRetryableError(detail.error);
+          break;
+        case "connected":
+          this._state.status = "connected";
+          this._state.error = null;
+          break;
+        case "complete":
+          this._state.status = "complete";
+          this._state.progress = 100;
+          break;
+      }
+    }
+    /**
+     * Check if an error is retryable
+     * @private
+     */
+    _isRetryableError(error) {
+      if (!error) return false;
+      const message = error.message || "";
+      return message.includes("timeout") || message.includes("network") || message.includes("disconnect") || message.includes("fetch") || message.includes("Download failed");
+    }
+    /**
+     * Get current flash state
+     * @returns {FlashState}
+     */
+    getState() {
+      return { ...this._state };
+    }
+    /**
+     * Retry the last failed operation
+     * @returns {Promise<boolean>}
+     */
+    async retry() {
+      if (!this._state.canRetry || !this._state.lastOperation) {
+        throw new Error("No operation to retry");
+      }
+      const { lastOperation, lastOperationOptions } = this._state;
+      this._state.error = null;
+      this._state.canRetry = false;
+      if (lastOperation === "connect") {
+        return this.connect();
+      } else if (lastOperation === "flash") {
+        return this.flash(lastOperationOptions);
+      } else if (lastOperation === "flashConfig") {
+        return this.flashConfig();
+      }
+      throw new Error(`Unknown operation: ${lastOperation}`);
     }
     /**
      * Emit a typed event
@@ -1344,11 +1561,53 @@ var ESPWebFlash = (() => {
       this.dispatchEvent(new CustomEvent(type, { detail }));
     }
     /**
+     * Clean up all event listeners and resources
+     * Call this when disposing of the flasher instance
+     */
+    dispose() {
+      for (const { source, event, handler } of this._forwardedListeners) {
+        source.removeEventListener(event, handler);
+      }
+      this._forwardedListeners = [];
+      if (this.device.getIsConnected()) {
+        this.device.disconnect().catch(() => {
+        });
+      }
+      this._state = {
+        status: "idle",
+        progress: 0,
+        error: null,
+        canRetry: false,
+        lastOperation: null,
+        lastOperationOptions: null
+      };
+    }
+    /**
      * Set configuration values
      * @param {Object} values - Key-value pairs
+     * @param {Object} [options] - Options
+     * @param {boolean} [options.validate=true] - Emit warnings for unknown keys
      */
-    setConfig(values) {
+    setConfig(values, options = {}) {
+      const { validate = true } = options;
+      if (validate && this.config.getSchema()) {
+        for (const key of Object.keys(values)) {
+          if (!this.config.hasField(key)) {
+            this.emit("log", {
+              message: `Unknown config key "${key}" - not in schema. This may not be saved to NVS correctly.`,
+              level: "warning"
+            });
+          }
+        }
+      }
       this.config.setAll(values);
+    }
+    /**
+     * Validate current configuration
+     * @returns {import('./config-store.js').ValidationResult}
+     */
+    validateConfig() {
+      return this.config.validate();
     }
     /**
      * Get current configuration
@@ -1369,10 +1628,20 @@ var ESPWebFlash = (() => {
      * @returns {Promise<{chipType: string, macAddr: string}>}
      */
     async connect() {
-      return this.device.connect(this.options.chip, {
-        baudrate: this.options.baudrate,
-        timeout: this.options.timeout
-      });
+      this._state.lastOperation = "connect";
+      this._state.lastOperationOptions = null;
+      this._state.status = "connecting";
+      try {
+        const result = await this.device.connect(this.options.chip, {
+          baudrate: this.options.baudrate,
+          timeout: this.options.timeout
+        });
+        this._state.canRetry = false;
+        return result;
+      } catch (error) {
+        this._state.canRetry = this._isRetryableError(error);
+        throw error;
+      }
     }
     /**
      * Disconnect from device
@@ -1396,44 +1665,93 @@ var ESPWebFlash = (() => {
     /**
      * Flash firmware (and NVS config if set)
      * @param {Object} [options] - Override options
+     * @param {boolean} [options.skipValidation] - Skip config validation
      * @returns {Promise<boolean>}
      */
     async flash(options = {}) {
+      this._state.lastOperation = "flash";
+      this._state.lastOperationOptions = options;
+      this._state.progress = 0;
       const firmwareUrl = options.firmwareUrl || this.options.firmwareUrl;
       if (!firmwareUrl && !options.customFirmware) {
         throw new Error("No firmware URL specified");
       }
       if (!this.device.getIsConnected()) {
-        throw new Error("Not connected to device");
+        throw new Error("Not connected to device. Call connect() first.");
+      }
+      if (this.options.validateOnFlash && !options.skipValidation) {
+        const validation = this.config.validate();
+        if (!validation.valid) {
+          const errorMessages = Object.values(validation.errors);
+          this.emit("log", {
+            message: `Config validation failed: ${errorMessages.join(", ")}`,
+            level: "error"
+          });
+          this.emit("validation-failed", {
+            validation,
+            errors: validation.errors,
+            missing: validation.missing
+          });
+          throw new Error(`Configuration validation failed: ${validation.missing.join(", ")} required`);
+        }
       }
       const nvsData = this.config.toNVS();
       const hasConfig = Object.keys(nvsData).length > 0;
-      return this.flasher.flash(this.device, firmwareUrl, {
-        customFirmware: options.customFirmware,
-        nvsData: hasConfig ? nvsData : null,
-        nvsNamespace: this.options.nvsNamespace,
-        nvsOffset: this.options.nvsOffset,
-        nvsSize: this.options.nvsSize,
-        firmwareOffset: options.firmwareOffset ?? this.options.firmwareOffset
-      });
+      try {
+        const result = await this.flasher.flash(this.device, firmwareUrl, {
+          customFirmware: options.customFirmware,
+          nvsData: hasConfig ? nvsData : null,
+          nvsNamespace: this.options.nvsNamespace,
+          nvsOffset: this.options.nvsOffset,
+          nvsSize: this.options.nvsSize,
+          firmwareOffset: options.firmwareOffset ?? this.options.firmwareOffset
+        });
+        this._state.canRetry = false;
+        return result;
+      } catch (error) {
+        this._state.canRetry = this._isRetryableError(error);
+        throw error;
+      }
     }
     /**
      * Flash only NVS configuration (without firmware)
+     * @param {Object} [options] - Options
+     * @param {boolean} [options.skipValidation] - Skip config validation
      * @returns {Promise<boolean>}
      */
-    async flashConfig() {
+    async flashConfig(options = {}) {
+      this._state.lastOperation = "flashConfig";
+      this._state.lastOperationOptions = options;
       if (!this.device.getIsConnected()) {
-        throw new Error("Not connected to device");
+        throw new Error("Not connected to device. Call connect() first.");
+      }
+      if (this.options.validateOnFlash && !options.skipValidation) {
+        const validation = this.config.validate();
+        if (!validation.valid) {
+          this.emit("validation-failed", {
+            validation,
+            errors: validation.errors,
+            missing: validation.missing
+          });
+          throw new Error(`Configuration validation failed: ${validation.missing.join(", ")} required`);
+        }
       }
       const nvsData = this.config.toNVS();
       if (Object.keys(nvsData).length === 0) {
         throw new Error("No configuration to flash");
       }
-      return this.flasher.flashNVS(this.device, nvsData, {
-        nvsNamespace: this.options.nvsNamespace,
-        nvsOffset: this.options.nvsOffset,
-        nvsSize: this.options.nvsSize
-      });
+      try {
+        const result = await this.flasher.flashNVS(this.device, nvsData, {
+          nvsNamespace: this.options.nvsNamespace,
+          nvsOffset: this.options.nvsOffset,
+          nvsSize: this.options.nvsSize
+        });
+        this._state.canRetry = false;
+        return result;
+      } catch (error) {
+        this._state.canRetry = this._isRetryableError(error);
+        throw error;
+      }
     }
     /**
      * Hard reset the device
@@ -1451,34 +1769,99 @@ var ESPWebFlash = (() => {
   };
 
   // src/adapters/vanilla/ui.js
+  var DEFAULT_BINDINGS = {
+    "status": "handleStatus",
+    "progress": "handleProgress",
+    "log": "handleLog",
+    "connected": "handleConnected",
+    "disconnected": "handleDisconnected",
+    "error": "handleError",
+    "chip-mismatch": "handleChipMismatch",
+    "complete": "handleComplete",
+    "schema-changed": "handleSchemaChanged",
+    "validation-failed": "handleValidationFailed"
+  };
   var FlasherUI = class {
     /**
      * @param {ESPFlasher} flasher - Core flasher instance
      * @param {UIElements} elements - DOM element references
+     * @param {Object} [options] - Configuration options
+     * @param {Object} [options.bindings] - Custom event bindings (event -> handler name)
+     * @param {boolean} [options.groupBySection] - Group config fields by section (default: true)
      */
-    constructor(flasher, elements = {}) {
+    constructor(flasher, elements = {}, options = {}) {
       this.flasher = flasher;
       this.elements = elements;
+      this.options = {
+        groupBySection: options.groupBySection !== false,
+        bindings: { ...DEFAULT_BINDINGS, ...options.bindings }
+      };
       this.flashStartTime = null;
       this.lastDisplayedPercent = 0;
       this.targetPercent = 0;
       this.animationFrame = null;
-      this.bindEvents();
+      this._boundHandlers = [];
+      this._inputHandlers = [];
+      this._bindEvents();
     }
     /**
-     * Bind to core flasher events
+     * Bind to core flasher events with cleanup tracking
      * @private
      */
-    bindEvents() {
-      this.flasher.addEventListener("status", (e) => this.handleStatus(e.detail));
-      this.flasher.addEventListener("progress", (e) => this.handleProgress(e.detail));
-      this.flasher.addEventListener("log", (e) => this.handleLog(e.detail));
-      this.flasher.addEventListener("connected", (e) => this.handleConnected(e.detail));
-      this.flasher.addEventListener("disconnected", () => this.handleDisconnected());
-      this.flasher.addEventListener("error", (e) => this.handleError(e.detail));
-      this.flasher.addEventListener("chip-mismatch", (e) => this.handleChipMismatch(e.detail));
-      this.flasher.addEventListener("complete", () => this.handleComplete());
-      this.flasher.addEventListener("schema-changed", (e) => this.renderConfigForm(e.detail.schema));
+    _bindEvents() {
+      for (const [event, handlerName] of Object.entries(this.options.bindings)) {
+        if (typeof this[handlerName] === "function") {
+          const handler = (e) => this[handlerName](e.detail);
+          this.flasher.addEventListener(event, handler);
+          this._boundHandlers.push({ event, handler });
+        }
+      }
+    }
+    /**
+     * Clean up all event listeners
+     * Call this when disposing of the UI instance
+     */
+    dispose() {
+      for (const { event, handler } of this._boundHandlers) {
+        this.flasher.removeEventListener(event, handler);
+      }
+      this._boundHandlers = [];
+      for (const { element, event, handler } of this._inputHandlers) {
+        element.removeEventListener(event, handler);
+      }
+      this._inputHandlers = [];
+      if (this.animationFrame) {
+        cancelAnimationFrame(this.animationFrame);
+        this.animationFrame = null;
+      }
+    }
+    /**
+     * Handle schema changes - renders config form
+     * @private
+     */
+    handleSchemaChanged({ schema }) {
+      this.renderConfigForm(schema);
+    }
+    /**
+     * Handle validation failures
+     * @private
+     */
+    handleValidationFailed({ errors, missing }) {
+      if (this.elements.configContainer) {
+        for (const key of Object.keys(errors)) {
+          const input = this.elements.configContainer.querySelector(`[data-key="${key}"]`);
+          if (input) {
+            input.classList.add("error");
+            let errorEl = input.parentNode.querySelector(".field-error");
+            if (!errorEl) {
+              errorEl = document.createElement("span");
+              errorEl.className = "field-error";
+              input.parentNode.appendChild(errorEl);
+            }
+            errorEl.textContent = errors[key];
+          }
+        }
+      }
     }
     /**
      * Handle status updates
@@ -1588,13 +1971,29 @@ var ESPWebFlash = (() => {
     /**
      * Handle errors
      */
-    handleError({ message }) {
+    handleError({ message, error }) {
       if (this.elements.statusBox) {
+        const state = this.flasher.getState();
+        const retryHtml = state.canRetry && this.elements.retryBtn ? "" : state.canRetry ? `<button class="retry-btn" onclick="this.closest('.status-box').dispatchEvent(new CustomEvent('retry'))">Retry</button>` : "";
         this.elements.statusBox.className = "status-box error";
         this.elements.statusBox.innerHTML = `
                 <div class="status-text">Error</div>
                 <div class="status-subtext">${message}</div>
+                ${retryHtml}
             `;
+        const retryBtn = this.elements.statusBox.querySelector(".retry-btn");
+        if (retryBtn) {
+          retryBtn.addEventListener("click", async () => {
+            try {
+              await this.flasher.retry();
+            } catch (e) {
+            }
+          });
+        }
+      }
+      if (this.elements.retryBtn) {
+        const state = this.flasher.getState();
+        this.elements.retryBtn.style.display = state.canRetry ? "block" : "none";
       }
     }
     /**
@@ -1629,32 +2028,71 @@ Do you want to continue anyway?`
     }
     /**
      * Render config form from schema
+     * @param {Array} schema - Field definitions
      */
     renderConfigForm(schema) {
       if (!this.elements.configContainer || !schema) return;
+      for (const { element, event, handler } of this._inputHandlers) {
+        element.removeEventListener(event, handler);
+      }
+      this._inputHandlers = [];
       this.elements.configContainer.innerHTML = "";
-      schema.forEach((field) => {
-        const group = document.createElement("div");
-        group.className = "form-group";
-        group.innerHTML = `
-                <label for="config-${field.key}">
-                    ${field.label}
-                    ${field.required ? '<span style="color: #ff3b30;">*</span>' : '<span style="color: #86868b; font-weight: 400;">(optional)</span>'}
-                </label>
-                <input
-                    type="${field.type || "text"}"
-                    id="config-${field.key}"
-                    data-key="${field.key}"
-                    placeholder="${field.placeholder || ""}"
-                    ${field.default ? `value="${field.default}"` : ""}
-                    ${field.required ? "required" : ""}>
-            `;
-        const input = group.querySelector("input");
-        input.addEventListener("input", () => {
-          this.flasher.setConfig({ [field.key]: input.value });
-        });
-        this.elements.configContainer.appendChild(group);
-      });
+      if (this.options.groupBySection) {
+        const sections = groupFieldsBySection(schema);
+        for (const section of sections) {
+          const sectionEl = document.createElement("div");
+          sectionEl.className = "config-section";
+          if (section.title && section.title !== "default") {
+            const header = document.createElement("h3");
+            header.className = "config-section-title";
+            header.textContent = section.title;
+            sectionEl.appendChild(header);
+          }
+          for (const field of section.fields) {
+            sectionEl.appendChild(this._createFieldElement(field));
+          }
+          this.elements.configContainer.appendChild(sectionEl);
+        }
+      } else {
+        for (const field of schema) {
+          this.elements.configContainer.appendChild(this._createFieldElement(field));
+        }
+      }
+    }
+    /**
+     * Create a form field element
+     * @private
+     */
+    _createFieldElement(field) {
+      const group = document.createElement("div");
+      group.className = "form-group";
+      const escapedPlaceholder = (field.placeholder || "").replace(/"/g, "&quot;");
+      const escapedDefault = (field.default || "").replace(/"/g, "&quot;");
+      group.innerHTML = `
+            <label for="config-${field.key}">
+                ${field.label}
+                ${field.required ? '<span class="required-marker">*</span>' : '<span class="optional-marker">(optional)</span>'}
+            </label>
+            <input
+                type="${field.type || "text"}"
+                id="config-${field.key}"
+                data-key="${field.key}"
+                placeholder="${escapedPlaceholder}"
+                value="${escapedDefault}"
+                ${field.required ? "required" : ""}
+                ${field.pattern ? `pattern="${field.pattern}"` : ""}>
+            ${field.help ? `<span class="help-text">${field.help}</span>` : ""}
+        `;
+      const input = group.querySelector("input");
+      const handler = () => {
+        input.classList.remove("error");
+        const errorEl = group.querySelector(".field-error");
+        if (errorEl) errorEl.remove();
+        this.flasher.setConfig({ [field.key]: input.value });
+      };
+      input.addEventListener("input", handler);
+      this._inputHandlers.push({ element: input, event: "input", handler });
+      return group;
     }
     /**
      * Clear the log
@@ -1738,31 +2176,23 @@ Do you want to continue anyway?`
      */
     initFlasher() {
       const project = this.selectedProject;
-      const fields = [];
-      if (project.configSections) {
-        project.configSections.forEach((section) => {
-          section.fields.forEach((field) => {
-            if (field.nvsKey) {
-              fields.push({
-                key: field.nvsKey,
-                label: field.label,
-                type: field.type || "text",
-                placeholder: field.placeholder,
-                default: field.default,
-                required: field.required
-              });
-            }
-          });
-        });
-      }
-      this.flasher = new ESPFlasher({
+      const nvsOffset = project.nvsOffset ?? (project.nvsPartition ? parseInt(project.nvsPartition.offset, 16) : 36864);
+      const nvsSize = project.nvsSize ?? (project.nvsPartition ? parseInt(project.nvsPartition.size, 16) : 24576);
+      const nvsNamespace = project.nvsPartition?.namespace || "config";
+      const flasherOptions = {
         chip: project.chip,
         firmwareUrl: project.firmwareUrl,
-        fields,
-        nvsOffset: project.nvsPartition ? parseInt(project.nvsPartition.offset, 16) : 36864,
-        nvsSize: project.nvsPartition ? parseInt(project.nvsPartition.size, 16) : 24576,
-        nvsNamespace: project.nvsPartition?.namespace || "config"
-      });
+        firmwareOffset: project.firmwareOffset ?? 65536,
+        nvsOffset,
+        nvsSize,
+        nvsNamespace
+      };
+      if (project.fields) {
+        flasherOptions.fields = project.fields;
+      } else if (project.configSections) {
+        flasherOptions.configSections = project.configSections;
+      }
+      this.flasher = new ESPFlasher(flasherOptions);
       const elements = {
         statusBox: document.getElementById("status-box"),
         progressContainer: document.getElementById("progress-container"),
@@ -1795,18 +2225,16 @@ Do you want to continue anyway?`
      * Load saved config from localStorage into flasher
      */
     loadSavedConfigIntoFlasher() {
-      const project = this.selectedProject;
-      if (!project.configSections) return;
+      const schema = this.flasher.getSchema();
+      if (!schema || schema.length === 0) return;
       const savedConfig = {};
-      project.configSections.forEach((section) => {
-        section.fields.forEach((field) => {
-          if (field.nvsKey && this.config[section.id]?.[field.id]) {
-            savedConfig[field.nvsKey] = this.config[section.id][field.id];
-          }
-        });
-      });
+      for (const field of schema) {
+        if (this.config[field.key] !== void 0) {
+          savedConfig[field.key] = this.config[field.key];
+        }
+      }
       if (Object.keys(savedConfig).length > 0) {
-        this.flasher.setConfig(savedConfig);
+        this.flasher.setConfig(savedConfig, { validate: false });
       }
     }
     /**
@@ -1906,60 +2334,55 @@ Do you want to continue anyway?`
     }
     /**
      * Render config form fields
+     * Supports both new 'fields' format and legacy 'configSections' format
      */
     renderConfigFields(project) {
       const container = document.getElementById("config-container");
-      if (!project.configSections) {
+      const schema = this.flasher.getSchema();
+      if (!schema || schema.length === 0) {
         container.innerHTML = '<div style="padding: 20px 0; text-align: center; color: #999; font-size: 13px;">No configuration needed</div>';
         return;
       }
       container.innerHTML = "";
-      project.configSections.forEach((section) => {
+      const sections = groupFieldsBySection(schema);
+      for (const section of sections) {
         const group = document.createElement("div");
         group.className = "config-group";
-        let html = `<h3>${section.title}</h3>`;
-        if (section.description) {
-          html += `<p class="help-text" style="margin-bottom: 12px;">${section.description}</p>`;
+        let html = "";
+        if (section.title && section.title !== "default") {
+          html += `<h3>${section.title}</h3>`;
         }
-        section.fields.forEach((field) => {
-          const fieldId = `${section.id}-${field.id}`;
-          const savedValue = this.config[section.id]?.[field.id] || field.default || "";
+        for (const field of section.fields) {
+          const savedValue = this.config[field.key] || field.default || "";
+          const escapedPlaceholder = (field.placeholder || "").replace(/"/g, "&quot;");
+          const escapedValue = String(savedValue).replace(/"/g, "&quot;");
           html += `
                     <div class="form-group">
-                        <label for="${fieldId}">
+                        <label for="config-${field.key}">
                             ${field.label}
                             ${field.required ? '<span style="color: #ff3b30;">*</span>' : '<span style="color: #86868b; font-weight: 400;">(optional)</span>'}
                         </label>
                         <input
                             type="${field.type || "text"}"
-                            id="${fieldId}"
-                            placeholder="${field.placeholder || ""}"
-                            value="${savedValue}"
+                            id="config-${field.key}"
+                            placeholder="${escapedPlaceholder}"
+                            value="${escapedValue}"
                             ${field.required ? "required" : ""}
                             ${field.pattern ? `pattern="${field.pattern}"` : ""}
-                            data-section="${section.id}"
-                            data-field="${field.id}"
-                            data-nvs-key="${field.nvsKey || ""}">
+                            data-key="${field.key}">
                         ${field.help ? `<span class="help-text">${field.help}</span>` : ""}
                     </div>
                 `;
-        });
+        }
         group.innerHTML = html;
         container.appendChild(group);
-      });
-      container.querySelectorAll("[data-section][data-field]").forEach((input) => {
+      }
+      container.querySelectorAll("[data-key]").forEach((input) => {
         input.addEventListener("input", () => {
-          const section = input.dataset.section;
-          const field = input.dataset.field;
-          const nvsKey = input.dataset.nvsKey;
-          if (!this.config[section]) {
-            this.config[section] = {};
-          }
-          this.config[section][field] = input.value;
+          const key = input.dataset.key;
+          this.config[key] = input.value;
           this.saveConfig();
-          if (nvsKey) {
-            this.flasher.setConfig({ [nvsKey]: input.value });
-          }
+          this.flasher.setConfig({ [key]: input.value });
         });
       });
     }
@@ -2260,42 +2683,71 @@ Do you want to continue anyway?`
   // src/adapters/vanilla/index.js
   function createFlasher(options) {
     const { elements, storageKey, ...flasherOptions } = options;
+    const buttonListeners = [];
     const flasher = new ESPFlasher(flasherOptions);
     const ui = new FlasherUI(flasher, elements);
+    let changeHandler = null;
     if (storageKey) {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
-          flasher.setConfig(JSON.parse(saved));
+          flasher.setConfig(JSON.parse(saved), { validate: false });
         } catch (e) {
           console.warn("Failed to load saved config:", e);
         }
       }
-      flasher.addEventListener("change", () => {
+      changeHandler = () => {
         localStorage.setItem(storageKey, JSON.stringify(flasher.getConfig()));
-      });
+      };
+      flasher.addEventListener("change", changeHandler);
     }
     if (elements.connectBtn) {
-      elements.connectBtn.addEventListener("click", async () => {
+      const connectHandler = async () => {
         elements.connectBtn.disabled = true;
         try {
           await flasher.connect();
         } catch (e) {
           elements.connectBtn.disabled = false;
         }
-      });
+      };
+      elements.connectBtn.addEventListener("click", connectHandler);
+      buttonListeners.push({ element: elements.connectBtn, event: "click", handler: connectHandler });
     }
     if (elements.flashBtn) {
-      elements.flashBtn.addEventListener("click", async () => {
+      const flashHandler = async () => {
         elements.flashBtn.disabled = true;
         try {
           await flasher.flash();
         } catch (e) {
           elements.flashBtn.disabled = false;
         }
-      });
+      };
+      elements.flashBtn.addEventListener("click", flashHandler);
+      buttonListeners.push({ element: elements.flashBtn, event: "click", handler: flashHandler });
     }
-    return { flasher, ui };
+    if (elements.retryBtn) {
+      const retryHandler = async () => {
+        elements.retryBtn.disabled = true;
+        try {
+          await flasher.retry();
+        } catch (e) {
+          elements.retryBtn.disabled = false;
+        }
+      };
+      elements.retryBtn.addEventListener("click", retryHandler);
+      buttonListeners.push({ element: elements.retryBtn, event: "click", handler: retryHandler });
+    }
+    function dispose() {
+      for (const { element, event, handler } of buttonListeners) {
+        element.removeEventListener(event, handler);
+      }
+      if (changeHandler) {
+        flasher.removeEventListener("change", changeHandler);
+      }
+      ui.dispose();
+      flasher.dispose();
+    }
+    return { flasher, ui, dispose };
   }
   return __toCommonJS(bundle_full_exports);
 })();

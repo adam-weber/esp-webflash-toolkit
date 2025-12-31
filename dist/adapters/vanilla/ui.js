@@ -1,31 +1,97 @@
+import { groupFieldsBySection } from "../../core/config-store.js";
+const DEFAULT_BINDINGS = {
+  "status": "handleStatus",
+  "progress": "handleProgress",
+  "log": "handleLog",
+  "connected": "handleConnected",
+  "disconnected": "handleDisconnected",
+  "error": "handleError",
+  "chip-mismatch": "handleChipMismatch",
+  "complete": "handleComplete",
+  "schema-changed": "handleSchemaChanged",
+  "validation-failed": "handleValidationFailed"
+};
 class FlasherUI {
   /**
    * @param {ESPFlasher} flasher - Core flasher instance
    * @param {UIElements} elements - DOM element references
+   * @param {Object} [options] - Configuration options
+   * @param {Object} [options.bindings] - Custom event bindings (event -> handler name)
+   * @param {boolean} [options.groupBySection] - Group config fields by section (default: true)
    */
-  constructor(flasher, elements = {}) {
+  constructor(flasher, elements = {}, options = {}) {
     this.flasher = flasher;
     this.elements = elements;
+    this.options = {
+      groupBySection: options.groupBySection !== false,
+      bindings: { ...DEFAULT_BINDINGS, ...options.bindings }
+    };
     this.flashStartTime = null;
     this.lastDisplayedPercent = 0;
     this.targetPercent = 0;
     this.animationFrame = null;
-    this.bindEvents();
+    this._boundHandlers = [];
+    this._inputHandlers = [];
+    this._bindEvents();
   }
   /**
-   * Bind to core flasher events
+   * Bind to core flasher events with cleanup tracking
    * @private
    */
-  bindEvents() {
-    this.flasher.addEventListener("status", (e) => this.handleStatus(e.detail));
-    this.flasher.addEventListener("progress", (e) => this.handleProgress(e.detail));
-    this.flasher.addEventListener("log", (e) => this.handleLog(e.detail));
-    this.flasher.addEventListener("connected", (e) => this.handleConnected(e.detail));
-    this.flasher.addEventListener("disconnected", () => this.handleDisconnected());
-    this.flasher.addEventListener("error", (e) => this.handleError(e.detail));
-    this.flasher.addEventListener("chip-mismatch", (e) => this.handleChipMismatch(e.detail));
-    this.flasher.addEventListener("complete", () => this.handleComplete());
-    this.flasher.addEventListener("schema-changed", (e) => this.renderConfigForm(e.detail.schema));
+  _bindEvents() {
+    for (const [event, handlerName] of Object.entries(this.options.bindings)) {
+      if (typeof this[handlerName] === "function") {
+        const handler = (e) => this[handlerName](e.detail);
+        this.flasher.addEventListener(event, handler);
+        this._boundHandlers.push({ event, handler });
+      }
+    }
+  }
+  /**
+   * Clean up all event listeners
+   * Call this when disposing of the UI instance
+   */
+  dispose() {
+    for (const { event, handler } of this._boundHandlers) {
+      this.flasher.removeEventListener(event, handler);
+    }
+    this._boundHandlers = [];
+    for (const { element, event, handler } of this._inputHandlers) {
+      element.removeEventListener(event, handler);
+    }
+    this._inputHandlers = [];
+    if (this.animationFrame) {
+      cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = null;
+    }
+  }
+  /**
+   * Handle schema changes - renders config form
+   * @private
+   */
+  handleSchemaChanged({ schema }) {
+    this.renderConfigForm(schema);
+  }
+  /**
+   * Handle validation failures
+   * @private
+   */
+  handleValidationFailed({ errors, missing }) {
+    if (this.elements.configContainer) {
+      for (const key of Object.keys(errors)) {
+        const input = this.elements.configContainer.querySelector(`[data-key="${key}"]`);
+        if (input) {
+          input.classList.add("error");
+          let errorEl = input.parentNode.querySelector(".field-error");
+          if (!errorEl) {
+            errorEl = document.createElement("span");
+            errorEl.className = "field-error";
+            input.parentNode.appendChild(errorEl);
+          }
+          errorEl.textContent = errors[key];
+        }
+      }
+    }
   }
   /**
    * Handle status updates
@@ -135,13 +201,29 @@ class FlasherUI {
   /**
    * Handle errors
    */
-  handleError({ message }) {
+  handleError({ message, error }) {
     if (this.elements.statusBox) {
+      const state = this.flasher.getState();
+      const retryHtml = state.canRetry && this.elements.retryBtn ? "" : state.canRetry ? `<button class="retry-btn" onclick="this.closest('.status-box').dispatchEvent(new CustomEvent('retry'))">Retry</button>` : "";
       this.elements.statusBox.className = "status-box error";
       this.elements.statusBox.innerHTML = `
                 <div class="status-text">Error</div>
                 <div class="status-subtext">${message}</div>
+                ${retryHtml}
             `;
+      const retryBtn = this.elements.statusBox.querySelector(".retry-btn");
+      if (retryBtn) {
+        retryBtn.addEventListener("click", async () => {
+          try {
+            await this.flasher.retry();
+          } catch (e) {
+          }
+        });
+      }
+    }
+    if (this.elements.retryBtn) {
+      const state = this.flasher.getState();
+      this.elements.retryBtn.style.display = state.canRetry ? "block" : "none";
     }
   }
   /**
@@ -176,32 +258,71 @@ Do you want to continue anyway?`
   }
   /**
    * Render config form from schema
+   * @param {Array} schema - Field definitions
    */
   renderConfigForm(schema) {
     if (!this.elements.configContainer || !schema) return;
+    for (const { element, event, handler } of this._inputHandlers) {
+      element.removeEventListener(event, handler);
+    }
+    this._inputHandlers = [];
     this.elements.configContainer.innerHTML = "";
-    schema.forEach((field) => {
-      const group = document.createElement("div");
-      group.className = "form-group";
-      group.innerHTML = `
-                <label for="config-${field.key}">
-                    ${field.label}
-                    ${field.required ? '<span style="color: #ff3b30;">*</span>' : '<span style="color: #86868b; font-weight: 400;">(optional)</span>'}
-                </label>
-                <input
-                    type="${field.type || "text"}"
-                    id="config-${field.key}"
-                    data-key="${field.key}"
-                    placeholder="${field.placeholder || ""}"
-                    ${field.default ? `value="${field.default}"` : ""}
-                    ${field.required ? "required" : ""}>
-            `;
-      const input = group.querySelector("input");
-      input.addEventListener("input", () => {
-        this.flasher.setConfig({ [field.key]: input.value });
-      });
-      this.elements.configContainer.appendChild(group);
-    });
+    if (this.options.groupBySection) {
+      const sections = groupFieldsBySection(schema);
+      for (const section of sections) {
+        const sectionEl = document.createElement("div");
+        sectionEl.className = "config-section";
+        if (section.title && section.title !== "default") {
+          const header = document.createElement("h3");
+          header.className = "config-section-title";
+          header.textContent = section.title;
+          sectionEl.appendChild(header);
+        }
+        for (const field of section.fields) {
+          sectionEl.appendChild(this._createFieldElement(field));
+        }
+        this.elements.configContainer.appendChild(sectionEl);
+      }
+    } else {
+      for (const field of schema) {
+        this.elements.configContainer.appendChild(this._createFieldElement(field));
+      }
+    }
+  }
+  /**
+   * Create a form field element
+   * @private
+   */
+  _createFieldElement(field) {
+    const group = document.createElement("div");
+    group.className = "form-group";
+    const escapedPlaceholder = (field.placeholder || "").replace(/"/g, "&quot;");
+    const escapedDefault = (field.default || "").replace(/"/g, "&quot;");
+    group.innerHTML = `
+            <label for="config-${field.key}">
+                ${field.label}
+                ${field.required ? '<span class="required-marker">*</span>' : '<span class="optional-marker">(optional)</span>'}
+            </label>
+            <input
+                type="${field.type || "text"}"
+                id="config-${field.key}"
+                data-key="${field.key}"
+                placeholder="${escapedPlaceholder}"
+                value="${escapedDefault}"
+                ${field.required ? "required" : ""}
+                ${field.pattern ? `pattern="${field.pattern}"` : ""}>
+            ${field.help ? `<span class="help-text">${field.help}</span>` : ""}
+        `;
+    const input = group.querySelector("input");
+    const handler = () => {
+      input.classList.remove("error");
+      const errorEl = group.querySelector(".field-error");
+      if (errorEl) errorEl.remove();
+      this.flasher.setConfig({ [field.key]: input.value });
+    };
+    input.addEventListener("input", handler);
+    this._inputHandlers.push({ element: input, event: "input", handler });
+    return group;
   }
   /**
    * Clear the log

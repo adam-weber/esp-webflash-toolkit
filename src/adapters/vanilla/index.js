@@ -6,7 +6,7 @@
  * @example
  * import { createFlasher } from 'esp-webflash-toolkit/adapters/vanilla';
  *
- * const { flasher, ui } = createFlasher({
+ * const { flasher, ui, dispose } = createFlasher({
  *   chip: 'esp32s3',
  *   firmwareUrl: 'https://...',
  *   fields: ['wifi'],
@@ -24,6 +24,9 @@
  *
  * // Buttons are auto-wired if provided
  * // Or manually: await flasher.connect(); await flasher.flash();
+ *
+ * // Clean up when done:
+ * // dispose();
  */
 
 import { ESPFlasher } from '../../core/flasher.js';
@@ -34,17 +37,28 @@ import { FlasherUI } from './ui.js';
  * @property {string} [chip] - Expected chip type
  * @property {string} [firmwareUrl] - Firmware URL
  * @property {Array} [fields] - Config field definitions
+ * @property {Array} [configSections] - Legacy section-based config format
  * @property {Object} elements - DOM element references
  * @property {string} [storageKey] - localStorage key for config persistence
  */
 
 /**
+ * @typedef {Object} CreateFlasherResult
+ * @property {ESPFlasher} flasher - Core flasher instance
+ * @property {FlasherUI} ui - UI adapter instance
+ * @property {Function} dispose - Cleanup function
+ */
+
+/**
  * Create a complete flasher setup with UI bindings
  * @param {VanillaFlasherOptions} options
- * @returns {{flasher: ESPFlasher, ui: FlasherUI}}
+ * @returns {CreateFlasherResult}
  */
 export function createFlasher(options) {
     const { elements, storageKey, ...flasherOptions } = options;
+
+    // Track all event listeners for cleanup
+    const buttonListeners = [];
 
     // Create core flasher
     const flasher = new ESPFlasher(flasherOptions);
@@ -53,46 +67,85 @@ export function createFlasher(options) {
     const ui = new FlasherUI(flasher, elements);
 
     // Load persisted config if storageKey provided
+    let changeHandler = null;
     if (storageKey) {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
             try {
-                flasher.setConfig(JSON.parse(saved));
+                // Don't validate on load - these are known good values
+                flasher.setConfig(JSON.parse(saved), { validate: false });
             } catch (e) {
                 console.warn('Failed to load saved config:', e);
             }
         }
 
         // Persist on change
-        flasher.addEventListener('change', () => {
+        changeHandler = () => {
             localStorage.setItem(storageKey, JSON.stringify(flasher.getConfig()));
-        });
+        };
+        flasher.addEventListener('change', changeHandler);
     }
 
     // Wire up buttons if provided
     if (elements.connectBtn) {
-        elements.connectBtn.addEventListener('click', async () => {
+        const connectHandler = async () => {
             elements.connectBtn.disabled = true;
             try {
                 await flasher.connect();
             } catch (e) {
                 elements.connectBtn.disabled = false;
             }
-        });
+        };
+        elements.connectBtn.addEventListener('click', connectHandler);
+        buttonListeners.push({ element: elements.connectBtn, event: 'click', handler: connectHandler });
     }
 
     if (elements.flashBtn) {
-        elements.flashBtn.addEventListener('click', async () => {
+        const flashHandler = async () => {
             elements.flashBtn.disabled = true;
             try {
                 await flasher.flash();
             } catch (e) {
                 elements.flashBtn.disabled = false;
             }
-        });
+        };
+        elements.flashBtn.addEventListener('click', flashHandler);
+        buttonListeners.push({ element: elements.flashBtn, event: 'click', handler: flashHandler });
     }
 
-    return { flasher, ui };
+    if (elements.retryBtn) {
+        const retryHandler = async () => {
+            elements.retryBtn.disabled = true;
+            try {
+                await flasher.retry();
+            } catch (e) {
+                elements.retryBtn.disabled = false;
+            }
+        };
+        elements.retryBtn.addEventListener('click', retryHandler);
+        buttonListeners.push({ element: elements.retryBtn, event: 'click', handler: retryHandler });
+    }
+
+    /**
+     * Clean up all resources
+     */
+    function dispose() {
+        // Remove button listeners
+        for (const { element, event, handler } of buttonListeners) {
+            element.removeEventListener(event, handler);
+        }
+
+        // Remove change handler
+        if (changeHandler) {
+            flasher.removeEventListener('change', changeHandler);
+        }
+
+        // Dispose UI and flasher
+        ui.dispose();
+        flasher.dispose();
+    }
+
+    return { flasher, ui, dispose };
 }
 
 // Re-export classes for direct usage

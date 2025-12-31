@@ -81,6 +81,9 @@ async function interactiveSetup() {
     }
   }
 
+  // Add MQTT option
+  const addMqtt = (await question('Add MQTT configuration fields? (y/N): ')).toLowerCase() === 'y';
+
   // Scaffold the project
   console.log(`\nCreating project in ${targetDir}...`);
   await scaffoldProject(targetDir, {
@@ -88,6 +91,7 @@ async function interactiveSetup() {
     chip: chip.toLowerCase().replace('-', ''),
     firmwareUrl: firmwareUrl.trim(),
     addWifi,
+    addMqtt,
     customFields
   });
 
@@ -123,35 +127,35 @@ async function scaffoldProject(targetDir, options) {
   // Copy template
   await fs.copy(TEMPLATE_DIR, targetDir);
 
-  // Generate projects-config.js
-  const configSections = [];
+  // Generate projects-config.js using the new flat fields format
+  // This format is compatible with both the core library and the legacy FlasherApp
+  const fields = [];
 
   if (options.addWifi) {
-    configSections.push(`            {
-                name: 'WiFi',
-                fields: [
-                    { key: 'wifi_ssid', label: 'WiFi Network', type: 'text', required: true },
-                    { key: 'wifi_pass', label: 'WiFi Password', type: 'password', required: true }
-                ]
-            }`);
+    // Use preset name for common patterns
+    fields.push(`'wifi'`);
   }
 
-  if (options.customFields.length > 0) {
-    const customFieldsStr = options.customFields.map(f =>
-      `                    { key: '${f.key}', label: '${f.label}', type: '${f.type}' }`
-    ).join(',\n');
-
-    configSections.push(`            {
-                name: 'Settings',
-                fields: [
-${customFieldsStr}
-                ]
-            }`);
+  if (options.addMqtt) {
+    fields.push(`'mqtt'`);
   }
+
+  if (options.customFields && options.customFields.length > 0) {
+    for (const f of options.customFields) {
+      fields.push(`{ key: '${f.key}', label: '${f.label}', type: '${f.type}' }`);
+    }
+  }
+
+  const fieldsStr = fields.length > 0
+    ? `\n            ${fields.join(',\n            ')}\n        `
+    : '';
 
   const configContent = `/**
  * Projects Configuration
  * Edit this file to configure your ESP flasher
+ *
+ * Field presets available: 'wifi', 'mqtt', 'device_name', 'api_key', 'server_url'
+ * Custom fields: { key: 'my_key', label: 'My Label', type: 'text', required: true }
  */
 
 window.PROJECTS = {
@@ -159,16 +163,21 @@ window.PROJECTS = {
         name: '${options.projectName}',
         chip: '${options.chip}',
         description: 'Flash firmware to your ${options.chip.toUpperCase()} device',
-        firmware: [
-            {
-                name: 'firmware.bin',
-                offset: 0x10000,
-                url: '${options.firmwareUrl || 'https://github.com/YOUR_USER/YOUR_REPO/releases/latest/download/firmware.bin'}'
-            }
-        ],
-        configSections: [
-${configSections.join(',\n')}
-        ]
+        firmwareUrl: '${options.firmwareUrl || 'https://github.com/YOUR_USER/YOUR_REPO/releases/latest/download/firmware.bin'}',
+        // Firmware offset (default: 0x10000 for app partition)
+        firmwareOffset: 0x10000,
+        // NVS configuration
+        nvsOffset: 0x9000,
+        nvsSize: 0x6000,
+        // Config fields - use presets or custom field objects
+        fields: [${fieldsStr}],
+        // Project metadata
+        hardware: ['ESP32 development board', 'USB-C cable'],
+        software: ['WiFi connectivity', 'OTA updates'],
+        documentation: {
+            label: 'Documentation',
+            url: 'https://github.com/YOUR_USER/YOUR_REPO'
+        }
     }
 };
 `;
