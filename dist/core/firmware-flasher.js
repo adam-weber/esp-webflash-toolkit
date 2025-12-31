@@ -35,9 +35,19 @@ class FirmwareFlasher extends EventTarget {
       } else {
         this.emit("log", { message: `Downloading from: ${firmwareUrl}`, level: "info" });
         this.emit("status", { state: "downloading", message: "Downloading firmware..." });
-        const response = await fetch(firmwareUrl);
-        if (!response.ok) {
-          throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+        let response;
+        try {
+          response = await fetch(firmwareUrl);
+          if (!response.ok) {
+            throw new Error(`${response.status}`);
+          }
+        } catch (e) {
+          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(firmwareUrl)}`;
+          this.emit("log", { message: "Using CORS proxy...", level: "info" });
+          response = await fetch(proxyUrl);
+          if (!response.ok) {
+            throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+          }
         }
         firmwareData = await response.arrayBuffer();
       }
