@@ -41,12 +41,21 @@ var ESPWebFlash = (() => {
     ESPFlasher: () => ESPFlasher,
     FieldPresets: () => FieldPresets,
     FirmwareFlasher: () => FirmwareFlasher,
+    FlashStateLabels: () => FlashStateLabels,
+    FlashStateMachine: () => FlashStateMachine,
+    FlashStates: () => FlashStates,
     FlasherApp: () => FlasherApp,
     FlasherUI: () => FlasherUI,
     NVSGenerator: () => NVSGenerator,
+    classifyError: () => classifyError,
     createFlasher: () => createFlasher,
     expandFieldPresets: () => expandFieldPresets,
-    flashDevice: () => flashDevice
+    flashDevice: () => flashDevice,
+    isBrowserSupported: () => isBrowserSupported,
+    isMobile: () => isMobile,
+    normalizeConfig: () => normalizeConfig,
+    resolveVariantFirmwareUrl: () => resolveVariantFirmwareUrl,
+    validateConfig: () => validateConfig
   });
 
   // src/core/device-connection.js
@@ -800,6 +809,236 @@ var ESPWebFlash = (() => {
     }
   };
 
+  // src/core/flash-states.js
+  var FlashStates = {
+    IDLE: "idle",
+    READY: "ready",
+    CONNECTING: "connecting",
+    CONNECTED: "connected",
+    DOWNLOADING: "downloading",
+    GENERATING: "generating",
+    WRITING: "writing",
+    VERIFYING: "verifying",
+    COMPLETE: "complete",
+    ERROR: "error"
+  };
+  var FlashStateLabels = {
+    [FlashStates.IDLE]: "Idle",
+    [FlashStates.READY]: "Ready",
+    [FlashStates.CONNECTING]: "Connecting...",
+    [FlashStates.CONNECTED]: "Connected",
+    [FlashStates.DOWNLOADING]: "Downloading firmware...",
+    [FlashStates.GENERATING]: "Generating config...",
+    [FlashStates.WRITING]: "Writing to device...",
+    [FlashStates.VERIFYING]: "Verifying...",
+    [FlashStates.COMPLETE]: "Complete",
+    [FlashStates.ERROR]: "Error"
+  };
+  var VALID_TRANSITIONS = {
+    [FlashStates.IDLE]: [FlashStates.READY, FlashStates.CONNECTING, FlashStates.ERROR],
+    [FlashStates.READY]: [FlashStates.CONNECTING, FlashStates.ERROR],
+    [FlashStates.CONNECTING]: [FlashStates.CONNECTED, FlashStates.ERROR, FlashStates.IDLE],
+    [FlashStates.CONNECTED]: [FlashStates.DOWNLOADING, FlashStates.GENERATING, FlashStates.WRITING, FlashStates.ERROR, FlashStates.IDLE],
+    [FlashStates.DOWNLOADING]: [FlashStates.GENERATING, FlashStates.WRITING, FlashStates.ERROR],
+    [FlashStates.GENERATING]: [FlashStates.WRITING, FlashStates.ERROR],
+    [FlashStates.WRITING]: [FlashStates.VERIFYING, FlashStates.COMPLETE, FlashStates.ERROR],
+    [FlashStates.VERIFYING]: [FlashStates.COMPLETE, FlashStates.ERROR],
+    [FlashStates.COMPLETE]: [FlashStates.IDLE, FlashStates.READY, FlashStates.CONNECTING],
+    [FlashStates.ERROR]: [FlashStates.IDLE, FlashStates.READY, FlashStates.CONNECTING]
+  };
+  var FlashStateMachine = class extends EventTarget {
+    constructor() {
+      super();
+      this._state = FlashStates.IDLE;
+    }
+    /** @returns {string} Current state */
+    get state() {
+      return this._state;
+    }
+    /** @returns {string} Human-readable label for current state */
+    get label() {
+      return FlashStateLabels[this._state] || this._state;
+    }
+    /**
+     * Transition to a new state.
+     * @param {string} newState - Target state from FlashStates
+     * @returns {boolean} Whether the transition was valid
+     */
+    transition(newState) {
+      const valid = VALID_TRANSITIONS[this._state];
+      if (!valid || !valid.includes(newState)) {
+        return false;
+      }
+      const from = this._state;
+      this._state = newState;
+      this.dispatchEvent(new CustomEvent("state-change", {
+        detail: {
+          from,
+          to: newState,
+          label: FlashStateLabels[newState] || newState
+        }
+      }));
+      return true;
+    }
+    /**
+     * Force transition (skips validation). Use for error recovery.
+     * @param {string} newState
+     */
+    force(newState) {
+      const from = this._state;
+      this._state = newState;
+      this.dispatchEvent(new CustomEvent("state-change", {
+        detail: {
+          from,
+          to: newState,
+          label: FlashStateLabels[newState] || newState
+        }
+      }));
+    }
+    /**
+     * Reset to IDLE state.
+     */
+    reset() {
+      this.force(FlashStates.IDLE);
+    }
+  };
+
+  // src/core/error-catalog.js
+  var BOOT_INSTRUCTIONS = {
+    esp32: "Hold the BOOT button while connecting, or press BOOT then EN/RST.",
+    esp32s2: "Hold BOOT, press RST, then release BOOT to enter download mode.",
+    esp32s3: "Hold BOOT, press RST, then release BOOT. Some boards auto-enter download mode.",
+    esp32c3: "Hold BOOT while connecting. The USB-JTAG interface may auto-detect.",
+    esp32c6: "Hold BOOT while connecting. Check your board's documentation.",
+    esp32h2: "Hold BOOT while connecting.",
+    esp8266: "Hold GPIO0/FLASH low, press RST, then release GPIO0."
+  };
+  var ERROR_PATTERNS = [
+    {
+      type: "connection_timeout",
+      patterns: [/timeout/i, /not responding/i, /timed out/i],
+      title: "Connection Timed Out",
+      steps: [
+        "Make sure the device is connected via USB",
+        "Put the device in download mode: {bootInstruction}",
+        "Try a different USB cable (some cables are charge-only)",
+        "Close any other serial monitors (Arduino IDE, PlatformIO, etc.)"
+      ]
+    },
+    {
+      type: "port_in_use",
+      patterns: [/port.*in use/i, /failed to open/i, /access denied/i, /busy/i, /port.*locked/i],
+      title: "Port In Use",
+      steps: [
+        "Close any serial monitors or terminal programs using this port",
+        "Close Arduino IDE, PlatformIO, or any other tools that may be connected",
+        "Unplug and replug the USB cable",
+        "Try restarting your browser"
+      ]
+    },
+    {
+      type: "download_failed",
+      patterns: [/download failed/i, /fetch.*failed/i, /network error/i, /cors/i, /404/i],
+      title: "Firmware Download Failed",
+      steps: [
+        "Check your internet connection",
+        "Verify the firmware URL is correct and accessible",
+        "The firmware server may be temporarily unavailable \u2014 try again in a moment",
+        "If the URL is private, make sure the release is public"
+      ]
+    },
+    {
+      type: "write_failed",
+      patterns: [/write.*fail/i, /flash.*fail/i, /erase.*fail/i],
+      title: "Flash Write Failed",
+      steps: [
+        "Put the device in download mode and try again: {bootInstruction}",
+        "Try a different USB cable or port",
+        "Power cycle the device and reconnect",
+        "The device flash memory may be damaged or write-protected"
+      ]
+    },
+    {
+      type: "disconnected_during_flash",
+      patterns: [/disconnect/i, /lost/i, /break/i, /detach/i, /removed/i],
+      title: "Device Disconnected",
+      steps: [
+        "Do not unplug the device during flashing",
+        "Use a reliable USB cable and avoid loose connections",
+        "Try a USB port directly on your computer (not a hub)",
+        "Reconnect and try again"
+      ]
+    },
+    {
+      type: "chip_mismatch",
+      patterns: [/chip mismatch/i, /unexpected chip/i],
+      title: "Wrong Chip Detected",
+      steps: [
+        "The connected device is a different chip than expected",
+        "Make sure you are flashing the correct firmware for your hardware",
+        "If this is correct, you may proceed \u2014 but the firmware may not work"
+      ]
+    },
+    {
+      type: "no_port_selected",
+      patterns: [/no port/i, /user cancelled/i, /no device/i, /requestport/i],
+      title: "No Device Selected",
+      steps: [
+        "Click Connect and select your device from the browser popup",
+        "Make sure the device is plugged in before clicking Connect",
+        "If the device doesn't appear, try a different USB cable or port"
+      ]
+    }
+  ];
+  function classifyError(error, context = {}) {
+    const message = typeof error === "string" ? error : error?.message || String(error);
+    const chip = (context.chip || "").toLowerCase().replace(/-/g, "");
+    for (const pattern of ERROR_PATTERNS) {
+      const matched = pattern.patterns.some((p) => p.test(message));
+      if (matched) {
+        const bootInstruction = BOOT_INSTRUCTIONS[chip] || BOOT_INSTRUCTIONS.esp32;
+        const steps = pattern.steps.map((s) => s.replace("{bootInstruction}", bootInstruction));
+        const chipSpecific = steps.some((s) => s !== pattern.steps[pattern.steps.indexOf(s)]);
+        return {
+          type: pattern.type,
+          title: pattern.title,
+          steps,
+          chipSpecific
+        };
+      }
+    }
+    return {
+      type: "unknown",
+      title: "Something Went Wrong",
+      steps: [
+        "Try disconnecting and reconnecting the device",
+        "Refresh the page and try again",
+        "Make sure no other programs are using the serial port"
+      ],
+      chipSpecific: false
+    };
+  }
+  function isBrowserSupported() {
+    if (typeof navigator === "undefined") {
+      return { supported: false, reason: "Not running in a browser" };
+    }
+    if (!navigator.serial) {
+      const ua = navigator.userAgent || "";
+      if (/Firefox/i.test(ua)) {
+        return { supported: false, reason: "Firefox does not support Web Serial. Please use Chrome, Edge, or Opera." };
+      }
+      if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) {
+        return { supported: false, reason: "Safari does not support Web Serial. Please use Chrome, Edge, or Opera." };
+      }
+      return { supported: false, reason: "Your browser does not support Web Serial. Please use Chrome, Edge, or Opera." };
+    }
+    return { supported: true, reason: null };
+  }
+  function isMobile() {
+    if (typeof navigator === "undefined") return false;
+    return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }
+
   // src/core/flasher.js
   var ESPFlasher = class extends EventTarget {
     /**
@@ -818,6 +1057,8 @@ var ESPWebFlash = (() => {
       this.device = new DeviceConnection();
       this.firmware = new FirmwareFlasher();
       this.config = new ConfigStore();
+      this.stateMachine = new FlashStateMachine();
+      this._forward(this.stateMachine, ["state-change"]);
       if (options.fields) {
         this.config.setSchema(expandFieldPresets(options.fields));
       } else if (options.configSections) {
@@ -846,12 +1087,45 @@ var ESPWebFlash = (() => {
     getSchema() {
       return this.config.getSchema();
     }
+    /**
+     * Set the active firmware variant (v2 config).
+     * Updates chip, firmware URL, offsets, and fields.
+     * @param {Object} variant - Variant object from v2 config
+     * @param {Object} [resolvedUrl] - Pre-resolved firmware URL
+     */
+    setVariant(variant, resolvedUrl) {
+      if (variant.chip) {
+        this.options.chip = variant.chip;
+      }
+      if (resolvedUrl || variant.firmware) {
+        this.options.firmwareUrl = resolvedUrl || variant.firmware;
+      }
+      if (variant.offset !== void 0) {
+        this.options.firmwareOffset = typeof variant.offset === "string" ? parseInt(variant.offset, 16) : variant.offset;
+      }
+      if (variant.nvsOffset !== void 0) {
+        this.options.nvsOffset = typeof variant.nvsOffset === "string" ? parseInt(variant.nvsOffset, 16) : variant.nvsOffset;
+      }
+      if (variant.fields) {
+        this.config.setSchema(expandFieldPresets(variant.fields));
+      }
+    }
     // --- Connection ---
     async connect() {
-      return this.device.connect(this.options.chip, {
-        baudrate: 115200,
-        timeout: 15e3
-      });
+      this.stateMachine.transition(FlashStates.CONNECTING);
+      try {
+        const result = await this.device.connect(this.options.chip, {
+          baudrate: 115200,
+          timeout: 15e3
+        });
+        this.stateMachine.transition(FlashStates.CONNECTED);
+        return result;
+      } catch (error) {
+        this.stateMachine.transition(FlashStates.ERROR);
+        const classified = classifyError(error, { chip: this.options.chip });
+        this.dispatchEvent(new CustomEvent("error-classified", { detail: classified }));
+        throw error;
+      }
     }
     async disconnect() {
       return this.device.disconnect();
@@ -875,16 +1149,26 @@ var ESPWebFlash = (() => {
       if (!this.device.getIsConnected()) {
         throw new Error("Not connected");
       }
+      this.stateMachine.transition(FlashStates.DOWNLOADING);
       const nvsData = this.config.toNVS();
       const hasConfig = Object.keys(nvsData).length > 0;
-      return this.firmware.flash(this.device, url, {
-        customFirmware: opts.customFirmware,
-        nvsData: hasConfig ? nvsData : null,
-        nvsNamespace: this.options.nvsNamespace,
-        nvsOffset: this.options.nvsOffset,
-        nvsSize: this.options.nvsSize,
-        firmwareOffset: opts.firmwareOffset ?? this.options.firmwareOffset
-      });
+      try {
+        const result = await this.firmware.flash(this.device, url, {
+          customFirmware: opts.customFirmware,
+          nvsData: hasConfig ? nvsData : null,
+          nvsNamespace: this.options.nvsNamespace,
+          nvsOffset: this.options.nvsOffset,
+          nvsSize: this.options.nvsSize,
+          firmwareOffset: opts.firmwareOffset ?? this.options.firmwareOffset
+        });
+        this.stateMachine.transition(FlashStates.COMPLETE);
+        return result;
+      } catch (error) {
+        this.stateMachine.transition(FlashStates.ERROR);
+        const classified = classifyError(error, { chip: this.options.chip });
+        this.dispatchEvent(new CustomEvent("error-classified", { detail: classified }));
+        throw error;
+      }
     }
     /** Flash only NVS config (no firmware) */
     async flashConfig() {
@@ -951,6 +1235,70 @@ var ESPWebFlash = (() => {
     }
   }
 
+  // src/core/config-schema.js
+  function normalizeConfig(json) {
+    if (json.version === 2) {
+      return json;
+    }
+    return {
+      version: 2,
+      name: json.name || "ESP Project",
+      repo: json.repo || null,
+      release: json.release || "latest",
+      branding: json.branding || null,
+      variants: [{
+        id: "default",
+        name: "Default",
+        firmware: json.firmware || json.bin,
+        chip: json.chip || "esp32",
+        offset: json.offset,
+        nvsOffset: json.nvsOffset,
+        fields: json.fields
+      }],
+      postFlash: json.postFlash || null
+    };
+  }
+  function resolveVariantFirmwareUrl(variant, config) {
+    const firmware = variant.firmware;
+    if (!firmware) return null;
+    if (firmware.startsWith("http://") || firmware.startsWith("https://")) {
+      return firmware;
+    }
+    if (config.repo) {
+      const release = config.release || "latest";
+      if (release === "latest") {
+        return `https://github.com/${config.repo}/releases/latest/download/${firmware}`;
+      }
+      return `https://github.com/${config.repo}/releases/download/${release}/${firmware}`;
+    }
+    return firmware;
+  }
+  function validateConfig(config) {
+    const errors = [];
+    if (!config.name) {
+      errors.push('Missing "name" field');
+    }
+    if (!config.variants || config.variants.length === 0) {
+      errors.push("At least one variant is required");
+    } else {
+      for (let i = 0; i < config.variants.length; i++) {
+        const v = config.variants[i];
+        if (!v.firmware) {
+          errors.push(`Variant ${i} ("${v.name || v.id || i}") missing "firmware" field`);
+        }
+      }
+    }
+    if (config.branding) {
+      if (config.branding.primaryColor && !/^#[0-9a-fA-F]{6}$/.test(config.branding.primaryColor)) {
+        errors.push('branding.primaryColor must be a 6-digit hex color (e.g., "#0071e3")');
+      }
+      if (config.branding.theme && !["light", "dark"].includes(config.branding.theme)) {
+        errors.push('branding.theme must be "light" or "dark"');
+      }
+    }
+    return { valid: errors.length === 0, errors };
+  }
+
   // src/adapters/vanilla/ui.js
   var DEFAULT_BINDINGS = {
     "status": "handleStatus",
@@ -959,9 +1307,11 @@ var ESPWebFlash = (() => {
     "connected": "handleConnected",
     "disconnected": "handleDisconnected",
     "error": "handleError",
+    "error-classified": "handleErrorClassified",
     "chip-mismatch": "handleChipMismatch",
     "complete": "handleComplete",
-    "schema-changed": "handleSchemaChanged"
+    "schema-changed": "handleSchemaChanged",
+    "state-change": "handleStateChange"
   };
   var FlasherUI = class {
     /**
@@ -978,6 +1328,7 @@ var ESPWebFlash = (() => {
         groupBySection: options.groupBySection !== false,
         bindings: { ...DEFAULT_BINDINGS, ...options.bindings }
       };
+      this.postFlash = null;
       this.flashStartTime = null;
       this.lastDisplayedPercent = 0;
       this.targetPercent = 0;
@@ -1023,6 +1374,14 @@ var ESPWebFlash = (() => {
      */
     handleSchemaChanged({ schema }) {
       this.renderConfigForm(schema);
+    }
+    /**
+     * Handle state machine state changes — show stage label
+     */
+    handleStateChange({ label }) {
+      if (this.elements.stageLabel) {
+        this.elements.stageLabel.textContent = label;
+      }
     }
     /**
      * Handle status updates
@@ -1130,16 +1489,28 @@ var ESPWebFlash = (() => {
       }
     }
     /**
-     * Handle errors
+     * Handle errors with optional recovery steps
      */
     handleError({ message }) {
-      if (this.elements.statusBox) {
-        this.elements.statusBox.className = "status-box error";
-        this.elements.statusBox.innerHTML = `
-                <div class="status-text">Error</div>
-                <div class="status-subtext">${message}</div>
-            `;
-      }
+      if (!this.elements.statusBox) return;
+      this.elements.statusBox.className = "status-box error";
+      this.elements.statusBox.innerHTML = `
+            <div class="status-text">Error</div>
+            <div class="status-subtext">${message}</div>
+        `;
+    }
+    /**
+     * Handle classified errors with recovery steps
+     * @param {{type: string, title: string, steps: string[]}} classified
+     */
+    handleErrorClassified(classified) {
+      if (!this.elements.statusBox) return;
+      const stepsHtml = classified.steps.map((s, i) => `<li>${s}</li>`).join("");
+      this.elements.statusBox.className = "status-box error";
+      this.elements.statusBox.innerHTML = `
+            <div class="status-text">${classified.title}</div>
+            <ol class="recovery-steps">${stepsHtml}</ol>
+        `;
     }
     /**
      * Handle chip mismatch - show dialog
@@ -1160,9 +1531,10 @@ Do you want to continue anyway?`
       }
     }
     /**
-     * Handle flash complete
+     * Handle flash complete, optionally showing postFlash instructions
+     * @param {Object} [detail]
      */
-    handleComplete() {
+    handleComplete(detail) {
       if (this.elements.progressTime) {
         this.elements.progressTime.textContent = "Complete";
       }
@@ -1170,6 +1542,27 @@ Do you want to continue anyway?`
         cancelAnimationFrame(this.animationFrame);
         this.animationFrame = null;
       }
+      if (this.postFlash && this.elements.statusBox) {
+        const pf = this.postFlash;
+        let html = `<div class="status-text">${pf.title || "Flash Complete!"}</div>`;
+        if (pf.steps && pf.steps.length > 0) {
+          html += '<ol class="post-flash-steps">';
+          html += pf.steps.map((s) => `<li>${s}</li>`).join("");
+          html += "</ol>";
+        }
+        if (pf.link) {
+          html += `<a href="${pf.link.url}" target="_blank" rel="noopener" class="post-flash-link">${pf.link.label}</a>`;
+        }
+        this.elements.statusBox.className = "status-box success";
+        this.elements.statusBox.innerHTML = html;
+      }
+    }
+    /**
+     * Set postFlash instructions to show on completion
+     * @param {Object} postFlash
+     */
+    setPostFlash(postFlash) {
+      this.postFlash = postFlash;
     }
     /**
      * Render config form from schema

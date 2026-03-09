@@ -52,6 +52,13 @@ async function main() {
         path.join(distDir, 'adapters', 'vanilla')
     );
 
+    // Build component modules (ESM for npm)
+    console.log('\nBuilding component modules...');
+    await buildDirectory(
+        path.join(srcDir, 'components'),
+        path.join(distDir, 'components')
+    );
+
     // Build browser bundles
     console.log('\nBuilding browser bundles...');
     await buildBundles();
@@ -119,6 +126,13 @@ async function buildBundles() {
         name: 'esp-webflash-toolkit-full',
         entry: path.join(srcDir, 'bundle-full.js'),
         globalName: 'ESPWebFlash'
+    });
+
+    // Component bundle (self-registering <esp-flasher> element)
+    await buildBundle({
+        name: 'esp-flasher-component',
+        entry: path.join(srcDir, 'bundle-component.js'),
+        globalName: 'ESPFlasherComponent'
     });
 }
 

@@ -7,6 +7,11 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; }
 
+        :root {
+            --primary: #0071e3;
+            --primary-hover: #0077ed;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f5f5f7;
@@ -51,6 +56,13 @@
             margin-left: 8px;
         }
 
+        .branding-logo {
+            display: block;
+            max-height: 48px;
+            max-width: 200px;
+            margin-bottom: 16px;
+        }
+
         .status-box {
             background: #f5f5f7;
             border-radius: 12px;
@@ -76,6 +88,14 @@
             color: #86868b;
         }
 
+        .stage-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #86868b;
+            margin-bottom: 4px;
+        }
+
         .btn {
             width: 100%;
             padding: 16px;
@@ -89,12 +109,12 @@
         }
 
         .btn-primary {
-            background: #0071e3;
+            background: var(--primary);
             color: white;
         }
 
         .btn-primary:hover:not(:disabled) {
-            background: #0077ed;
+            background: var(--primary-hover);
         }
 
         .btn-secondary {
@@ -118,7 +138,7 @@
 
         .progress-fill {
             height: 100%;
-            background: #0071e3;
+            background: var(--primary);
             width: 0%;
             transition: width 0.3s;
         }
@@ -177,9 +197,62 @@
             background: white;
         }
 
-        .form-group input:focus {
+        .form-group input:focus, .form-group select:focus {
             outline: none;
-            border-color: #0071e3;
+            border-color: var(--primary);
+        }
+
+        .variant-selector {
+            margin-bottom: 20px;
+        }
+
+        .variant-selector select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 15px;
+            background: white;
+        }
+
+        .variant-description {
+            font-size: 13px;
+            color: #86868b;
+            margin-top: 6px;
+        }
+
+        .recovery-steps {
+            text-align: left;
+            font-size: 14px;
+            color: #1d1d1f;
+            margin: 12px 0 0;
+            padding-left: 20px;
+        }
+
+        .recovery-steps li {
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .post-flash-steps {
+            text-align: left;
+            font-size: 14px;
+            color: #1d1d1f;
+            margin: 12px 0;
+            padding-left: 20px;
+        }
+
+        .post-flash-steps li {
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .post-flash-link {
+            display: inline-block;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+            margin-top: 8px;
         }
 
         .footer {
@@ -190,7 +263,7 @@
         }
 
         .footer a {
-            color: #0071e3;
+            color: var(--primary);
             text-decoration: none;
         }
 
@@ -238,6 +311,43 @@
             font-size: 14px;
             margin-bottom: 20px;
             display: none;
+        }
+
+        /* Desktop Required / Mobile block */
+        .mobile-block {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .mobile-block h2 {
+            font-size: 22px;
+            margin: 0 0 12px;
+        }
+
+        .mobile-block p {
+            color: #86868b;
+            font-size: 15px;
+            margin-bottom: 24px;
+        }
+
+        .mobile-block .btn {
+            max-width: 300px;
+            margin: 8px auto;
+        }
+
+        .unsupported-block {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .unsupported-block h2 {
+            font-size: 22px;
+            margin: 0 0 12px;
+        }
+
+        .unsupported-block p {
+            color: #86868b;
+            font-size: 15px;
         }
 
         .advanced-toggle {
@@ -336,8 +446,23 @@
 </head>
 <body>
     <div class="container">
+        <!-- Browser/Mobile Gate -->
         <div id="browser-warning" class="browser-warning">
             Web Serial requires Chrome, Edge, or Opera. Safari and Firefox are not supported.
+        </div>
+
+        <!-- Mobile block (replaces entire UI) -->
+        <div id="mobile-block" class="card mobile-block" style="display: none;">
+            <h2>Desktop Required</h2>
+            <p>Flashing firmware requires a USB connection and a desktop browser with Web Serial support (Chrome, Edge, or Opera).</p>
+            <button class="btn btn-primary" id="mobile-copy-btn">Copy Link</button>
+            <button class="btn btn-secondary" id="mobile-share-btn">Share Link</button>
+        </div>
+
+        <!-- Unsupported browser block -->
+        <div id="unsupported-block" class="card unsupported-block" style="display: none;">
+            <h2>Browser Not Supported</h2>
+            <p id="unsupported-reason">Your browser does not support Web Serial. Please use Chrome, Edge, or Opera.</p>
         </div>
 
         <!-- Setup Mode (shown when no params) -->
@@ -420,12 +545,20 @@
 
         <!-- Flash Mode (shown with params) -->
         <div id="flash-view" class="card" style="display: none;">
+            <img id="branding-logo" class="branding-logo" style="display: none;" alt="Logo">
             <h1 id="project-name">ESP Project</h1>
             <p class="subtitle" id="project-subtitle">Flash firmware to your device</p>
+
+            <div id="variant-selector" class="variant-selector" style="display: none;">
+                <label style="display: block; font-size: 15px; color: #1d1d1f; margin-bottom: 6px;">Firmware Variant</label>
+                <select id="variant-select"></select>
+                <div id="variant-description" class="variant-description"></div>
+            </div>
 
             <div id="config-fields"></div>
 
             <div id="status-box" class="status-box">
+                <div class="stage-label" id="stage-label"></div>
                 <div class="status-text" id="status-text">Ready to connect</div>
                 <div class="status-subtext" id="status-subtext">Click Connect to begin</div>
             </div>
@@ -450,318 +583,481 @@
 
     <script>
         // Get library from global
-        const { ESPFlasher, expandFieldPresets, FieldPresets } = ESPWebFlash;
+        const {
+            ESPFlasher, expandFieldPresets, FieldPresets,
+            normalizeConfig, resolveVariantFirmwareUrl, validateConfig,
+            classifyError, isBrowserSupported, isMobile
+        } = ESPWebFlash;
 
-        // Browser check
-        if (!navigator.serial) {
-            document.getElementById('browser-warning').style.display = 'block';
-        }
+        // --- Browser & Mobile Gate ---
+        const browserCheck = isBrowserSupported();
+        const mobileCheck = isMobile();
 
-        // Parse URL params
-        const params = new URLSearchParams(window.location.search);
-        const config = {
-            name: params.get('name') || params.get('n'),
-            bin: params.get('bin') || params.get('b'),
-            chip: params.get('chip') || params.get('c') || 'esp32',
-            repo: params.get('repo') || params.get('r'),
-            fields: params.get('fields') || params.get('f'),
-            nvsOffset: parseInt(params.get('nvs') || '0x9000', 16),
-            offset: parseInt(params.get('offset') || params.get('o') || '0x10000', 16)
-        };
-
-        const setupView = document.getElementById('setup-view');
-        const flashView = document.getElementById('flash-view');
-
-        // State
-        let flasher = null;
-
-        // Logging
-        const logEl = document.getElementById('log');
-        function log(msg, type = 'info') {
-            logEl.classList.add('visible');
-            const line = document.createElement('div');
-            line.className = `log-line ${type}`;
-            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            logEl.appendChild(line);
-            logEl.scrollTop = logEl.scrollHeight;
-        }
-
-        function updateStatus(state, text, subtext) {
-            const box = document.getElementById('status-box');
-            box.className = `status-box ${state}`;
-            document.getElementById('status-text').textContent = text;
-            document.getElementById('status-subtext').textContent = subtext || '';
-        }
-
-        // Initialize
-        async function init() {
-            if (config.repo && !config.bin) {
-                await loadFromRepo(config.repo);
-                return;
-            }
-
-            if (config.name && config.bin) {
-                showFlashView();
-            } else {
-                showSetupView();
-            }
-        }
-
-        async function loadFromRepo(repo) {
-            try {
-                const url = `https://raw.githubusercontent.com/${repo}/main/flash-config.json`;
-                let res = await fetch(url);
-                if (!res.ok) {
-                    const url2 = `https://raw.githubusercontent.com/${repo}/master/flash-config.json`;
-                    res = await fetch(url2);
-                    if (!res.ok) throw new Error('flash-config.json not found');
+        if (mobileCheck) {
+            // Block entire UI, show mobile message
+            document.getElementById('mobile-block').style.display = 'block';
+            const pageUrl = window.location.href;
+            document.getElementById('mobile-copy-btn').onclick = () => {
+                navigator.clipboard.writeText(pageUrl).then(() => {
+                    document.getElementById('mobile-copy-btn').textContent = 'Copied!';
+                    setTimeout(() => {
+                        document.getElementById('mobile-copy-btn').textContent = 'Copy Link';
+                    }, 2000);
+                });
+            };
+            document.getElementById('mobile-share-btn').onclick = () => {
+                if (navigator.share) {
+                    navigator.share({ title: 'ESP Web Flasher', url: pageUrl });
+                } else {
+                    navigator.clipboard.writeText(pageUrl);
+                    document.getElementById('mobile-share-btn').textContent = 'Copied!';
+                    setTimeout(() => {
+                        document.getElementById('mobile-share-btn').textContent = 'Share Link';
+                    }, 2000);
                 }
-                const json = await res.json();
-                applyConfig(json, repo);
-            } catch (e) {
-                console.error('Failed to load from repo:', e);
-                showSetupView();
-                alert(`Could not load flash-config.json from ${repo}`);
-            }
+            };
+            // Stop here — do not show flash UI
+        } else if (!browserCheck.supported) {
+            document.getElementById('unsupported-block').style.display = 'block';
+            document.getElementById('unsupported-reason').textContent = browserCheck.reason;
+        } else {
+            // Browser OK, proceed with normal init
+            initApp();
         }
 
-        function applyConfig(json, repo) {
-            config.name = json.name || repo.split('/')[1];
-            config.bin = json.firmware || json.bin;
-            config.chip = json.chip || 'esp32';
-            config.offset = parseInt(json.offset || '0x10000', 16);
-            config.nvsOffset = parseInt(json.nvsOffset || '0x9000', 16);
-            config.fields = json.fields;
-
-            if (config.bin && !config.bin.startsWith('http')) {
-                config.bin = `https://github.com/${repo}/releases/latest/download/${config.bin}`;
-            }
-
-            showFlashView();
-        }
-
-        function showSetupView() {
-            setupView.style.display = 'block';
-            flashView.style.display = 'none';
-
-            const chipSelect = document.getElementById('setup-chip');
-            const chipCustom = document.getElementById('setup-chip-custom');
-            chipSelect.onchange = () => {
-                chipCustom.style.display = chipSelect.value === 'custom' ? 'block' : 'none';
+        function initApp() {
+            // Parse URL params
+            const params = new URLSearchParams(window.location.search);
+            const config = {
+                name: params.get('name') || params.get('n'),
+                bin: params.get('bin') || params.get('b'),
+                chip: params.get('chip') || params.get('c') || 'esp32',
+                repo: params.get('repo') || params.get('r'),
+                fields: params.get('fields') || params.get('f'),
+                nvsOffset: parseInt(params.get('nvs') || '0x9000', 16),
+                offset: parseInt(params.get('offset') || params.get('o') || '0x10000', 16)
             };
 
-            document.getElementById('generate-url-btn').onclick = () => {
-                const name = document.getElementById('setup-name').value.trim();
-                const bin = document.getElementById('setup-bin').value.trim();
-                let chip = document.getElementById('setup-chip').value;
-                if (chip === 'custom') {
-                    chip = document.getElementById('setup-chip-custom').value.trim().toLowerCase();
-                    if (!chip) {
-                        alert('Please enter a chip type');
+            const setupView = document.getElementById('setup-view');
+            const flashView = document.getElementById('flash-view');
+
+            // State
+            let flasher = null;
+            let v2Config = null;  // Normalized v2 config (when loaded from repo)
+            let activeVariant = null;
+
+            // Logging
+            const logEl = document.getElementById('log');
+            function log(msg, type = 'info') {
+                logEl.classList.add('visible');
+                const line = document.createElement('div');
+                line.className = `log-line ${type}`;
+                line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                logEl.appendChild(line);
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            function updateStatus(state, text, subtext) {
+                const box = document.getElementById('status-box');
+                box.className = `status-box ${state}`;
+                document.getElementById('status-text').textContent = text;
+                document.getElementById('status-subtext').textContent = subtext || '';
+            }
+
+            // Initialize
+            async function init() {
+                if (config.repo && !config.bin) {
+                    await loadFromRepo(config.repo);
+                    return;
+                }
+
+                if (config.name && config.bin) {
+                    showFlashView();
+                } else {
+                    showSetupView();
+                }
+            }
+
+            async function loadFromRepo(repo) {
+                try {
+                    const url = `https://raw.githubusercontent.com/${repo}/main/flash-config.json`;
+                    let res = await fetch(url);
+                    if (!res.ok) {
+                        const url2 = `https://raw.githubusercontent.com/${repo}/master/flash-config.json`;
+                        res = await fetch(url2);
+                        if (!res.ok) throw new Error('flash-config.json not found');
+                    }
+                    const json = await res.json();
+                    applyConfig(json, repo);
+                } catch (e) {
+                    console.error('Failed to load from repo:', e);
+                    showSetupView();
+                    alert(`Could not load flash-config.json from ${repo}`);
+                }
+            }
+
+            function applyConfig(json, repo) {
+                // Normalize to v2
+                v2Config = normalizeConfig(json);
+                if (repo && !v2Config.repo) {
+                    v2Config.repo = repo;
+                }
+
+                // Use first variant as default
+                const variant = v2Config.variants[0];
+                config.name = v2Config.name;
+                config.chip = variant.chip || 'esp32';
+                config.bin = resolveVariantFirmwareUrl(variant, v2Config);
+                config.offset = variant.offset
+                    ? (typeof variant.offset === 'string' ? parseInt(variant.offset, 16) : variant.offset)
+                    : 0x10000;
+                config.nvsOffset = variant.nvsOffset
+                    ? (typeof variant.nvsOffset === 'string' ? parseInt(variant.nvsOffset, 16) : variant.nvsOffset)
+                    : 0x9000;
+                config.fields = variant.fields || json.fields;
+                activeVariant = variant;
+
+                showFlashView();
+            }
+
+            function applyBranding(branding) {
+                if (!branding) return;
+
+                if (branding.primaryColor) {
+                    document.documentElement.style.setProperty('--primary', branding.primaryColor);
+                    // Derive hover shade (slightly lighter)
+                    const hex = branding.primaryColor.replace('#', '');
+                    const r = Math.min(255, parseInt(hex.substr(0, 2), 16) + 10);
+                    const g = Math.min(255, parseInt(hex.substr(2, 2), 16) + 10);
+                    const b = Math.min(255, parseInt(hex.substr(4, 2), 16) + 10);
+                    document.documentElement.style.setProperty('--primary-hover',
+                        `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+                    );
+                }
+
+                if (branding.logo) {
+                    const logoEl = document.getElementById('branding-logo');
+                    logoEl.src = branding.logo;
+                    logoEl.style.display = 'block';
+                }
+
+                if (branding.theme === 'dark') {
+                    document.body.style.background = '#1d1d1f';
+                    document.querySelector('.card').style.background = '#2c2c2e';
+                    document.querySelector('.card').style.color = '#f5f5f7';
+                }
+            }
+
+            function showSetupView() {
+                setupView.style.display = 'block';
+                flashView.style.display = 'none';
+
+                const chipSelect = document.getElementById('setup-chip');
+                const chipCustom = document.getElementById('setup-chip-custom');
+                chipSelect.onchange = () => {
+                    chipCustom.style.display = chipSelect.value === 'custom' ? 'block' : 'none';
+                };
+
+                document.getElementById('generate-url-btn').onclick = () => {
+                    const name = document.getElementById('setup-name').value.trim();
+                    const bin = document.getElementById('setup-bin').value.trim();
+                    let chip = document.getElementById('setup-chip').value;
+                    if (chip === 'custom') {
+                        chip = document.getElementById('setup-chip-custom').value.trim().toLowerCase();
+                        if (!chip) {
+                            alert('Please enter a chip type');
+                            return;
+                        }
+                    }
+
+                    if (!name || !bin) {
+                        alert('Please fill in project name and firmware URL');
                         return;
                     }
-                }
 
-                if (!name || !bin) {
-                    alert('Please fill in project name and firmware URL');
-                    return;
-                }
+                    const fieldIds = ['wifi', 'mqtt', 'device_name', 'api_key', 'server_url'];
+                    const selectedFields = fieldIds.filter(id =>
+                        document.getElementById(`field-${id}`).checked
+                    );
 
-                const fieldIds = ['wifi', 'mqtt', 'device_name', 'api_key', 'server_url'];
-                const selectedFields = fieldIds.filter(id =>
-                    document.getElementById(`field-${id}`).checked
-                );
+                    const url = new URL(window.location.href.split('?')[0]);
+                    url.searchParams.set('name', name);
+                    url.searchParams.set('bin', bin);
+                    url.searchParams.set('chip', chip);
+                    if (selectedFields.length > 0) {
+                        url.searchParams.set('fields', selectedFields.join(','));
+                    }
 
-                const url = new URL(window.location.href.split('?')[0]);
-                url.searchParams.set('name', name);
-                url.searchParams.set('bin', bin);
-                url.searchParams.set('chip', chip);
-                if (selectedFields.length > 0) {
-                    url.searchParams.set('fields', selectedFields.join(','));
-                }
+                    const offset = document.getElementById('setup-offset').value.trim();
+                    const nvs = document.getElementById('setup-nvs').value.trim();
+                    if (offset && offset !== '0x10000') {
+                        url.searchParams.set('offset', offset);
+                    }
+                    if (nvs && nvs !== '0x9000') {
+                        url.searchParams.set('nvs', nvs);
+                    }
 
-                const offset = document.getElementById('setup-offset').value.trim();
-                const nvs = document.getElementById('setup-nvs').value.trim();
-                if (offset && offset !== '0x10000') {
-                    url.searchParams.set('offset', offset);
-                }
-                if (nvs && nvs !== '0x9000') {
-                    url.searchParams.set('nvs', nvs);
-                }
+                    const urlStr = url.toString();
+                    document.getElementById('generated-url').textContent = urlStr;
+                    document.getElementById('generated-url').classList.add('visible');
+                    document.getElementById('url-buttons').style.display = 'flex';
+                };
 
-                const urlStr = url.toString();
-                document.getElementById('generated-url').textContent = urlStr;
-                document.getElementById('generated-url').classList.add('visible');
-                document.getElementById('url-buttons').style.display = 'flex';
-            };
+                document.getElementById('copy-url-btn').onclick = () => {
+                    const url = document.getElementById('generated-url').textContent;
+                    navigator.clipboard.writeText(url);
+                    document.getElementById('copy-url-btn').textContent = 'Copied!';
+                    setTimeout(() => {
+                        document.getElementById('copy-url-btn').textContent = 'Copy Link';
+                    }, 2000);
+                };
 
-            document.getElementById('copy-url-btn').onclick = () => {
-                const url = document.getElementById('generated-url').textContent;
-                navigator.clipboard.writeText(url);
-                document.getElementById('copy-url-btn').textContent = 'Copied!';
-                setTimeout(() => {
-                    document.getElementById('copy-url-btn').textContent = 'Copy Link';
-                }, 2000);
-            };
+                document.getElementById('test-url-btn').onclick = () => {
+                    const url = document.getElementById('generated-url').textContent;
+                    window.open(url, '_blank');
+                };
 
-            document.getElementById('test-url-btn').onclick = () => {
-                const url = document.getElementById('generated-url').textContent;
-                window.open(url, '_blank');
-            };
-
-            document.getElementById('load-repo-btn').onclick = async () => {
-                const repo = document.getElementById('setup-repo').value.trim();
-                if (!repo) {
-                    alert('Please enter a GitHub repo (e.g., username/repo)');
-                    return;
-                }
-                await loadFromRepo(repo);
-            };
-        }
-
-        function showFlashView() {
-            setupView.style.display = 'none';
-            flashView.style.display = 'block';
-
-            document.getElementById('project-name').textContent = config.name;
-            document.getElementById('project-subtitle').innerHTML =
-                `Flash firmware to your device <span class="chip-badge">${config.chip.toUpperCase()}</span>`;
-
-            // Parse fields and create flasher
-            let fields = [];
-            if (typeof config.fields === 'string') {
-                fields = config.fields.split(',').map(f => f.trim());
-            } else if (Array.isArray(config.fields)) {
-                fields = config.fields;
+                document.getElementById('load-repo-btn').onclick = async () => {
+                    const repo = document.getElementById('setup-repo').value.trim();
+                    if (!repo) {
+                        alert('Please enter a GitHub repo (e.g., username/repo)');
+                        return;
+                    }
+                    await loadFromRepo(repo);
+                };
             }
 
-            // Create the flasher instance
-            flasher = new ESPFlasher({
-                chip: config.chip,
-                firmwareUrl: config.bin,
-                firmwareOffset: config.offset,
-                nvsOffset: config.nvsOffset,
-                fields: fields
-            });
+            function showFlashView() {
+                setupView.style.display = 'none';
+                flashView.style.display = 'block';
 
-            // Bind events
-            flasher.addEventListener('status', (e) => {
-                const { state, message } = e.detail;
-                const stateMap = {
-                    connecting: '',
-                    connected: 'connected',
-                    downloading: 'flashing',
-                    generating: 'flashing',
-                    flashing: 'flashing',
-                    complete: 'success'
-                };
-                updateStatus(stateMap[state] || state, message);
-            });
+                document.getElementById('project-name').textContent = config.name;
+                document.getElementById('project-subtitle').innerHTML =
+                    `Flash firmware to your device <span class="chip-badge">${config.chip.toUpperCase()}</span>`;
 
-            flasher.addEventListener('progress', (e) => {
-                const { percent } = e.detail;
-                document.getElementById('progress-bar').style.display = 'block';
-                document.getElementById('progress-fill').style.width = `${percent}%`;
-                updateStatus('flashing', 'Flashing...', `${Math.round(percent)}%`);
-            });
-
-            flasher.addEventListener('log', (e) => {
-                const { message, level } = e.detail;
-                log(message, level);
-            });
-
-            flasher.addEventListener('connected', (e) => {
-                const { chipType } = e.detail;
-                updateStatus('connected', 'Connected', chipType);
-                document.getElementById('flash-btn').disabled = false;
-                document.getElementById('flash-btn').style.display = 'block';
-                document.getElementById('connect-btn').style.display = 'none';
-            });
-
-            flasher.addEventListener('error', (e) => {
-                updateStatus('error', 'Error', e.detail.message);
-            });
-
-            flasher.addEventListener('complete', () => {
-                updateStatus('success', 'Flash Complete!', 'You can disconnect the device');
-            });
-
-            flasher.addEventListener('chip-mismatch', (e) => {
-                const { expected, detected, proceed, cancel } = e.detail;
-                if (confirm(`Chip mismatch: expected ${expected}, found ${detected}. Continue anyway?`)) {
-                    proceed();
-                } else {
-                    cancel();
+                // Apply branding if v2 config
+                if (v2Config && v2Config.branding) {
+                    applyBranding(v2Config.branding);
                 }
-            });
 
-            // Render config fields
-            renderConfigFields(fields);
-
-            // Button handlers
-            document.getElementById('connect-btn').onclick = async () => {
-                document.getElementById('connect-btn').disabled = true;
-                document.getElementById('connect-btn').textContent = 'Connecting...';
-                try {
-                    await flasher.connect();
-                } catch (e) {
-                    document.getElementById('connect-btn').disabled = false;
-                    document.getElementById('connect-btn').textContent = 'Connect Device';
+                // Render variant selector if multiple variants
+                if (v2Config && v2Config.variants.length > 1) {
+                    renderVariantSelector(v2Config.variants);
                 }
-            };
 
-            document.getElementById('flash-btn').onclick = async () => {
-                document.getElementById('flash-btn').disabled = true;
-                try {
-                    // Collect config values from form
-                    const configValues = {};
-                    document.querySelectorAll('[data-nvs-key]').forEach(input => {
-                        const key = input.dataset.nvsKey;
-                        const value = input.value.trim();
-                        if (value) configValues[key] = value;
-                    });
-                    flasher.setConfig(configValues);
+                // Parse fields and create flasher
+                let fields = [];
+                if (typeof config.fields === 'string') {
+                    fields = config.fields.split(',').map(f => f.trim());
+                } else if (Array.isArray(config.fields)) {
+                    fields = config.fields;
+                }
 
-                    await flasher.flash();
-                } catch (e) {
+                // Create the flasher instance
+                flasher = new ESPFlasher({
+                    chip: config.chip,
+                    firmwareUrl: config.bin,
+                    firmwareOffset: config.offset,
+                    nvsOffset: config.nvsOffset,
+                    fields: fields
+                });
+
+                // Bind events
+                flasher.addEventListener('status', (e) => {
+                    const { state, message } = e.detail;
+                    const stateMap = {
+                        connecting: '',
+                        connected: 'connected',
+                        downloading: 'flashing',
+                        generating: 'flashing',
+                        flashing: 'flashing',
+                        complete: 'success'
+                    };
+                    updateStatus(stateMap[state] || state, message);
+                });
+
+                flasher.addEventListener('state-change', (e) => {
+                    const { label } = e.detail;
+                    document.getElementById('stage-label').textContent = label;
+                });
+
+                flasher.addEventListener('progress', (e) => {
+                    const { percent } = e.detail;
+                    document.getElementById('progress-bar').style.display = 'block';
+                    document.getElementById('progress-fill').style.width = `${percent}%`;
+                    updateStatus('flashing', 'Flashing...', `${Math.round(percent)}%`);
+                });
+
+                flasher.addEventListener('log', (e) => {
+                    const { message, level } = e.detail;
+                    log(message, level);
+                });
+
+                flasher.addEventListener('connected', (e) => {
+                    const { chipType } = e.detail;
+                    updateStatus('connected', 'Connected', chipType);
                     document.getElementById('flash-btn').disabled = false;
+                    document.getElementById('flash-btn').style.display = 'block';
+                    document.getElementById('connect-btn').style.display = 'none';
+                });
+
+                flasher.addEventListener('error', (e) => {
+                    updateStatus('error', 'Error', e.detail.message);
+                });
+
+                // Enhanced error UX: show recovery steps
+                flasher.addEventListener('error-classified', (e) => {
+                    const { title, steps } = e.detail;
+                    const box = document.getElementById('status-box');
+                    box.className = 'status-box error';
+                    const stepsHtml = steps.map(s => `<li>${s}</li>`).join('');
+                    box.innerHTML = `
+                        <div class="status-text">${title}</div>
+                        <ol class="recovery-steps">${stepsHtml}</ol>
+                    `;
+                });
+
+                flasher.addEventListener('complete', () => {
+                    // Show postFlash instructions if available
+                    const pf = v2Config && v2Config.postFlash;
+                    if (pf) {
+                        const box = document.getElementById('status-box');
+                        box.className = 'status-box success';
+                        let html = `<div class="status-text">${pf.title || 'Flash Complete!'}</div>`;
+                        if (pf.steps && pf.steps.length > 0) {
+                            html += '<ol class="post-flash-steps">';
+                            html += pf.steps.map(s => `<li>${s}</li>`).join('');
+                            html += '</ol>';
+                        }
+                        if (pf.link) {
+                            html += `<a href="${pf.link.url}" target="_blank" rel="noopener" class="post-flash-link">${pf.link.label}</a>`;
+                        }
+                        box.innerHTML = html;
+                    } else {
+                        updateStatus('success', 'Flash Complete!', 'You can disconnect the device');
+                    }
+                });
+
+                flasher.addEventListener('chip-mismatch', (e) => {
+                    const { expected, detected, proceed, cancel } = e.detail;
+                    if (confirm(`Chip mismatch: expected ${expected}, found ${detected}. Continue anyway?`)) {
+                        proceed();
+                    } else {
+                        cancel();
+                    }
+                });
+
+                // Render config fields
+                renderConfigFields(fields);
+
+                // Button handlers
+                document.getElementById('connect-btn').onclick = async () => {
+                    document.getElementById('connect-btn').disabled = true;
+                    document.getElementById('connect-btn').textContent = 'Connecting...';
+                    try {
+                        await flasher.connect();
+                    } catch (e) {
+                        document.getElementById('connect-btn').disabled = false;
+                        document.getElementById('connect-btn').textContent = 'Connect Device';
+                    }
+                };
+
+                document.getElementById('flash-btn').onclick = async () => {
+                    document.getElementById('flash-btn').disabled = true;
+                    try {
+                        // Collect config values from form
+                        const configValues = {};
+                        document.querySelectorAll('[data-nvs-key]').forEach(input => {
+                            const key = input.dataset.nvsKey;
+                            const value = input.value.trim();
+                            if (value) configValues[key] = value;
+                        });
+                        flasher.setConfig(configValues);
+
+                        await flasher.flash();
+                    } catch (e) {
+                        document.getElementById('flash-btn').disabled = false;
+                    }
+                };
+            }
+
+            function renderVariantSelector(variants) {
+                const container = document.getElementById('variant-selector');
+                const select = document.getElementById('variant-select');
+                const descEl = document.getElementById('variant-description');
+
+                container.style.display = 'block';
+                select.innerHTML = '';
+
+                variants.forEach((v, i) => {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = v.name || v.id || `Variant ${i + 1}`;
+                    select.appendChild(option);
+                });
+
+                // Show first variant description
+                if (variants[0].description) {
+                    descEl.textContent = variants[0].description;
                 }
-            };
+
+                select.onchange = () => {
+                    const idx = parseInt(select.value);
+                    const variant = variants[idx];
+                    activeVariant = variant;
+
+                    // Update description
+                    descEl.textContent = variant.description || '';
+
+                    // Update chip badge
+                    const chip = variant.chip || v2Config.variants[0].chip || 'esp32';
+                    document.getElementById('project-subtitle').innerHTML =
+                        `Flash firmware to your device <span class="chip-badge">${chip.toUpperCase()}</span>`;
+
+                    // Update flasher
+                    const resolvedUrl = resolveVariantFirmwareUrl(variant, v2Config);
+                    flasher.setVariant(variant, resolvedUrl);
+
+                    // Re-render config fields
+                    const fields = variant.fields || [];
+                    renderConfigFields(fields);
+                };
+            }
+
+            function renderConfigFields(fields) {
+                const container = document.getElementById('config-fields');
+                container.innerHTML = '';
+
+                if (!fields || fields.length === 0) return;
+
+                // Expand field presets
+                const expandedFields = expandFieldPresets(fields);
+
+                if (expandedFields.length === 0) return;
+
+                const section = document.createElement('div');
+                section.className = 'config-section';
+                section.innerHTML = '<h3>Configuration</h3>';
+
+                expandedFields.forEach(field => {
+                    const group = document.createElement('div');
+                    group.className = 'form-group';
+                    group.innerHTML = `
+                        <label>${field.label || field.key}</label>
+                        <input type="${field.type || 'text'}"
+                               id="field-${field.key}"
+                               data-nvs-key="${field.key}"
+                               placeholder="${field.placeholder || ''}">
+                    `;
+                    section.appendChild(group);
+                });
+
+                container.appendChild(section);
+            }
+
+            // Start
+            init();
         }
-
-        function renderConfigFields(fields) {
-            const container = document.getElementById('config-fields');
-            container.innerHTML = '';
-
-            if (!fields || fields.length === 0) return;
-
-            // Expand field presets
-            const expandedFields = expandFieldPresets(fields);
-
-            if (expandedFields.length === 0) return;
-
-            const section = document.createElement('div');
-            section.className = 'config-section';
-            section.innerHTML = '<h3>Configuration</h3>';
-
-            expandedFields.forEach(field => {
-                const group = document.createElement('div');
-                group.className = 'form-group';
-                group.innerHTML = `
-                    <label>${field.label || field.key}</label>
-                    <input type="${field.type || 'text'}"
-                           id="field-${field.key}"
-                           data-nvs-key="${field.key}"
-                           placeholder="${field.placeholder || ''}">
-                `;
-                section.appendChild(group);
-            });
-
-            container.appendChild(section);
-        }
-
-        // Start
-        init();
     </script>
 </body>
 </html>

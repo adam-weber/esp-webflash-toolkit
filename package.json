@@ -38,11 +38,15 @@
     "./nvs-generator": {
       "import": "./dist/core/nvs-generator.js"
     },
+    "./component": {
+      "import": "./dist/components/esp-flasher.js"
+    },
     "./dist/*": "./dist/*"
   },
   "browser": {
     ".": "./dist/esp-webflash-toolkit.min.js",
-    "./full": "./dist/esp-webflash-toolkit-full.min.js"
+    "./full": "./dist/esp-webflash-toolkit-full.min.js",
+    "./component": "./dist/esp-flasher-component.min.js"
   },
   "bin": {
     "esp-webflash-toolkit": "./bin/cli.js"
@@ -51,6 +55,9 @@
     "dist/",
     "templates/",
     "bin/",
+    "scripts/generate-page.js",
+    "src/core/config-schema.js",
+    "action.yml",
     "README.md",
     "LICENSE"
   ],

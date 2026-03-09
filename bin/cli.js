@@ -16,6 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const TEMPLATE_DIR = path.join(__dirname, '..', 'templates', 'flasher');
+const SCRIPTS_DIR = path.join(__dirname, '..', 'scripts');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -298,6 +299,26 @@ async function urlCommand() {
   console.log('\nShare this link - users can flash directly from their browser!\n');
 }
 
+async function generateCommand(configPath, outputDir) {
+  const { generatePage } = await import(path.join(SCRIPTS_DIR, 'generate-page.js'));
+
+  configPath = path.resolve(configPath || 'flash-config.json');
+  outputDir = path.resolve(outputDir || '_flasher');
+
+  if (!fs.existsSync(configPath)) {
+    console.error(`Error: Config file not found: ${configPath}`);
+    process.exit(1);
+  }
+
+  console.log(`\nGenerating flash page from ${configPath}...`);
+
+  const { htmlPath, badgeMarkdown } = await generatePage(configPath, outputDir);
+
+  console.log(`\n✅ Flash page generated: ${htmlPath}`);
+  console.log(`\nBadge markdown:\n${badgeMarkdown}`);
+  console.log(`\nTo preview:\n  npx serve ${outputDir}\n`);
+}
+
 function showHelp() {
   console.log(`
 ESP WebFlash Toolkit - Let users flash your ESP32 from a browser
@@ -306,12 +327,15 @@ Usage:
   npx esp-webflash-toolkit                    Interactive project setup
   npx esp-webflash-toolkit create <name>      Quick scaffold (minimal prompts)
   npx esp-webflash-toolkit url                Generate a hosted flash URL
+  npx esp-webflash-toolkit generate [config]  Generate a self-contained flash page
   npx esp-webflash-toolkit --help             Show this help
 
 Examples:
   npx esp-webflash-toolkit                    # Interactive setup wizard
   npx esp-webflash-toolkit create my-flasher  # Quick create
   npx esp-webflash-toolkit url                # Get hosted URL (no setup needed!)
+  npx esp-webflash-toolkit generate           # Generate page from flash-config.json
+  npx esp-webflash-toolkit generate config.json --output dist
 
 Hosted Flasher (zero setup):
   Add flash-config.json to your repo, then share:
@@ -341,6 +365,14 @@ async function main() {
       await quickScaffold(projectName);
     } else if (command === 'url') {
       await urlCommand();
+    } else if (command === 'generate') {
+      const configPath = args[1];
+      let outputDir;
+      const outputIdx = args.indexOf('--output');
+      if (outputIdx !== -1) outputDir = args[outputIdx + 1];
+      const oIdx = args.indexOf('-o');
+      if (oIdx !== -1) outputDir = args[oIdx + 1];
+      await generateCommand(configPath, outputDir);
     } else if (command === 'init') {
       // Init in current directory
       await scaffoldProject(process.cwd(), {

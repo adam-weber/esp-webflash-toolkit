@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP Flasher Component Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f7;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .demo-section {
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+
+        h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+        h2 { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: #1d1d1f; }
+
+        .subtitle { color: #86868b; font-size: 15px; margin-bottom: 32px; }
+
+        pre {
+            background: #1d1d1f;
+            color: #f5f5f7;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            overflow-x: auto;
+            margin-bottom: 20px;
+        }
+
+        code { font-family: 'SF Mono', Monaco, monospace; }
+
+        .demo-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+
+        .demo-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #86868b;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-section">
+        <h1>ESP Flasher Component</h1>
+        <p class="subtitle">Drop-in web component for ESP32 firmware flashing</p>
+
+        <!-- Demo 1: Compact Mode (default) -->
+        <h2>Compact Mode (default)</h2>
+        <p>Renders a single button. Click to open the flash UI in a modal.</p>
+        <pre><code>&lt;esp-flasher
+    firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
+    chip="esp32s3"
+    fields="wifi"&gt;&lt;/esp-flasher&gt;</code></pre>
+
+        <div class="demo-card">
+            <div class="demo-label">Live Demo</div>
+            <esp-flasher
+                firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
+                chip="esp32s3"
+                fields="wifi"></esp-flasher>
+        </div>
+
+        <!-- Demo 2: Full Mode -->
+        <h2>Full Mode</h2>
+        <p>Renders the complete flash UI inline as a card.</p>
+        <pre><code>&lt;esp-flasher
+    firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
+    chip="esp32"
+    fields="wifi,device_name"
+    mode="full"&gt;&lt;/esp-flasher&gt;</code></pre>
+
+        <div class="demo-card">
+            <div class="demo-label">Live Demo</div>
+            <esp-flasher
+                firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
+                chip="esp32"
+                fields="wifi,device_name"
+                mode="full"></esp-flasher>
+        </div>
+
+        <!-- Demo 3: Config URL -->
+        <h2>Config URL</h2>
+        <p>Load a v2 flash-config.json from a URL. Supports multiple variants, branding, and post-flash instructions.</p>
+        <pre><code>&lt;esp-flasher
+    config="https://raw.githubusercontent.com/user/repo/main/flash-config.json"
+    mode="full"&gt;&lt;/esp-flasher&gt;</code></pre>
+
+        <!-- Demo 4: Events -->
+        <h2>JavaScript Events</h2>
+        <p>Listen for events on the element.</p>
+        <pre><code>const el = document.querySelector('esp-flasher');
+el.addEventListener('esp-flasher:connected', (e) =&gt; {
+    console.log('Connected:', e.detail.chipType);
+});
+el.addEventListener('esp-flasher:complete', () =&gt; {
+    console.log('Flash complete!');
+});
+el.addEventListener('esp-flasher:error', (e) =&gt; {
+    console.log('Error:', e.detail.message);
+});
+
+// Programmatic access to internal ESPFlasher
+el.flasher.setConfig({ wifi_ssid: 'MyNetwork' });</code></pre>
+    </div>
+
+    <!-- Load the component bundle -->
+    <script src="../../dist/esp-flasher-component.min.js"></script>
+</body>
+</html>
