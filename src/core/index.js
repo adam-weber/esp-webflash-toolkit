@@ -31,3 +31,12 @@ export { NVSGenerator } from './nvs-generator.js';
 
 // Config utilities
 export { ConfigStore, FieldPresets, expandFieldPresets } from './config-store.js';
+
+// Config schema v2
+export { normalizeConfig, resolveVariantFirmwareUrl, validateConfig } from './config-schema.js';
+
+// Flash states
+export { FlashStates, FlashStateLabels, FlashStateMachine, VALID_TRANSITIONS } from './flash-states.js';
+
+// Error catalog
+export { classifyError, isBrowserSupported, isMobile } from './error-catalog.js';

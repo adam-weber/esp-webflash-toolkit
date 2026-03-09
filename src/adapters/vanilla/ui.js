@@ -33,9 +33,11 @@ const DEFAULT_BINDINGS = {
     'connected': 'handleConnected',
     'disconnected': 'handleDisconnected',
     'error': 'handleError',
+    'error-classified': 'handleErrorClassified',
     'chip-mismatch': 'handleChipMismatch',
     'complete': 'handleComplete',
-    'schema-changed': 'handleSchemaChanged'
+    'schema-changed': 'handleSchemaChanged',
+    'state-change': 'handleStateChange'
 };
 
 export class FlasherUI {
@@ -53,6 +55,9 @@ export class FlasherUI {
             groupBySection: options.groupBySection !== false,
             bindings: { ...DEFAULT_BINDINGS, ...options.bindings }
         };
+
+        // PostFlash config
+        this.postFlash = null;
 
         // Animation state
         this.flashStartTime = null;
@@ -112,6 +117,15 @@ export class FlasherUI {
      */
     handleSchemaChanged({ schema }) {
         this.renderConfigForm(schema);
+    }
+
+    /**
+     * Handle state machine state changes — show stage label
+     */
+    handleStateChange({ label }) {
+        if (this.elements.stageLabel) {
+            this.elements.stageLabel.textContent = label;
+        }
     }
 
     /**
@@ -243,16 +257,34 @@ export class FlasherUI {
     }
 
     /**
-     * Handle errors
+     * Handle errors with optional recovery steps
      */
     handleError({ message }) {
-        if (this.elements.statusBox) {
-            this.elements.statusBox.className = 'status-box error';
-            this.elements.statusBox.innerHTML = `
-                <div class="status-text">Error</div>
-                <div class="status-subtext">${message}</div>
-            `;
-        }
+        if (!this.elements.statusBox) return;
+
+        this.elements.statusBox.className = 'status-box error';
+        this.elements.statusBox.innerHTML = `
+            <div class="status-text">Error</div>
+            <div class="status-subtext">${message}</div>
+        `;
+    }
+
+    /**
+     * Handle classified errors with recovery steps
+     * @param {{type: string, title: string, steps: string[]}} classified
+     */
+    handleErrorClassified(classified) {
+        if (!this.elements.statusBox) return;
+
+        const stepsHtml = classified.steps
+            .map((s, i) => `<li>${s}</li>`)
+            .join('');
+
+        this.elements.statusBox.className = 'status-box error';
+        this.elements.statusBox.innerHTML = `
+            <div class="status-text">${classified.title}</div>
+            <ol class="recovery-steps">${stepsHtml}</ol>
+        `;
     }
 
     /**
@@ -275,9 +307,10 @@ export class FlasherUI {
     }
 
     /**
-     * Handle flash complete
+     * Handle flash complete, optionally showing postFlash instructions
+     * @param {Object} [detail]
      */
-    handleComplete() {
+    handleComplete(detail) {
         if (this.elements.progressTime) {
             this.elements.progressTime.textContent = 'Complete';
         }
@@ -287,6 +320,30 @@ export class FlasherUI {
             cancelAnimationFrame(this.animationFrame);
             this.animationFrame = null;
         }
+
+        // Render postFlash screen if available
+        if (this.postFlash && this.elements.statusBox) {
+            const pf = this.postFlash;
+            let html = `<div class="status-text">${pf.title || 'Flash Complete!'}</div>`;
+            if (pf.steps && pf.steps.length > 0) {
+                html += '<ol class="post-flash-steps">';
+                html += pf.steps.map(s => `<li>${s}</li>`).join('');
+                html += '</ol>';
+            }
+            if (pf.link) {
+                html += `<a href="${pf.link.url}" target="_blank" rel="noopener" class="post-flash-link">${pf.link.label}</a>`;
+            }
+            this.elements.statusBox.className = 'status-box success';
+            this.elements.statusBox.innerHTML = html;
+        }
+    }
+
+    /**
+     * Set postFlash instructions to show on completion
+     * @param {Object} postFlash
+     */
+    setPostFlash(postFlash) {
+        this.postFlash = postFlash;
     }
 
     /**

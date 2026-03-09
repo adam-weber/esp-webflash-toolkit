@@ -16,7 +16,16 @@ export {
     NVSGenerator,
     ConfigStore,
     FieldPresets,
-    expandFieldPresets
+    expandFieldPresets,
+    normalizeConfig,
+    resolveVariantFirmwareUrl,
+    validateConfig,
+    FlashStates,
+    FlashStateLabels,
+    FlashStateMachine,
+    classifyError,
+    isBrowserSupported,
+    isMobile
 } from './core/index.js';
 
 // Vanilla adapter exports

@@ -7,6 +7,8 @@
 import { DeviceConnection } from './device-connection.js';
 import { FirmwareFlasher } from './firmware-flasher.js';
 import { ConfigStore, expandFieldPresets, flattenConfigSections } from './config-store.js';
+import { FlashStateMachine, FlashStates } from './flash-states.js';
+import { classifyError } from './error-catalog.js';
 
 /**
  * @typedef {Object} FlasherOptions
@@ -40,6 +42,10 @@ export class ESPFlasher extends EventTarget {
         this.firmware = new FirmwareFlasher();
         this.config = new ConfigStore();
 
+        // State machine (additive — existing events unchanged)
+        this.stateMachine = new FlashStateMachine();
+        this._forward(this.stateMachine, ['state-change']);
+
         // Set schema if fields provided (support both formats)
         if (options.fields) {
             this.config.setSchema(expandFieldPresets(options.fields));
@@ -69,13 +75,49 @@ export class ESPFlasher extends EventTarget {
     getConfig() { return this.config.getAll(); }
     getSchema() { return this.config.getSchema(); }
 
+    /**
+     * Set the active firmware variant (v2 config).
+     * Updates chip, firmware URL, offsets, and fields.
+     * @param {Object} variant - Variant object from v2 config
+     * @param {Object} [resolvedUrl] - Pre-resolved firmware URL
+     */
+    setVariant(variant, resolvedUrl) {
+        if (variant.chip) {
+            this.options.chip = variant.chip;
+        }
+        if (resolvedUrl || variant.firmware) {
+            this.options.firmwareUrl = resolvedUrl || variant.firmware;
+        }
+        if (variant.offset !== undefined) {
+            this.options.firmwareOffset = typeof variant.offset === 'string'
+                ? parseInt(variant.offset, 16) : variant.offset;
+        }
+        if (variant.nvsOffset !== undefined) {
+            this.options.nvsOffset = typeof variant.nvsOffset === 'string'
+                ? parseInt(variant.nvsOffset, 16) : variant.nvsOffset;
+        }
+        if (variant.fields) {
+            this.config.setSchema(expandFieldPresets(variant.fields));
+        }
+    }
+
     // --- Connection ---
 
     async connect() {
-        return this.device.connect(this.options.chip, {
-            baudrate: 115200,
-            timeout: 15000
-        });
+        this.stateMachine.transition(FlashStates.CONNECTING);
+        try {
+            const result = await this.device.connect(this.options.chip, {
+                baudrate: 115200,
+                timeout: 15000
+            });
+            this.stateMachine.transition(FlashStates.CONNECTED);
+            return result;
+        } catch (error) {
+            this.stateMachine.transition(FlashStates.ERROR);
+            const classified = classifyError(error, { chip: this.options.chip });
+            this.dispatchEvent(new CustomEvent('error-classified', { detail: classified }));
+            throw error;
+        }
     }
 
     async disconnect() { return this.device.disconnect(); }
@@ -98,17 +140,28 @@ export class ESPFlasher extends EventTarget {
             throw new Error('Not connected');
         }
 
+        this.stateMachine.transition(FlashStates.DOWNLOADING);
+
         const nvsData = this.config.toNVS();
         const hasConfig = Object.keys(nvsData).length > 0;
 
-        return this.firmware.flash(this.device, url, {
-            customFirmware: opts.customFirmware,
-            nvsData: hasConfig ? nvsData : null,
-            nvsNamespace: this.options.nvsNamespace,
-            nvsOffset: this.options.nvsOffset,
-            nvsSize: this.options.nvsSize,
-            firmwareOffset: opts.firmwareOffset ?? this.options.firmwareOffset
-        });
+        try {
+            const result = await this.firmware.flash(this.device, url, {
+                customFirmware: opts.customFirmware,
+                nvsData: hasConfig ? nvsData : null,
+                nvsNamespace: this.options.nvsNamespace,
+                nvsOffset: this.options.nvsOffset,
+                nvsSize: this.options.nvsSize,
+                firmwareOffset: opts.firmwareOffset ?? this.options.firmwareOffset
+            });
+            this.stateMachine.transition(FlashStates.COMPLETE);
+            return result;
+        } catch (error) {
+            this.stateMachine.transition(FlashStates.ERROR);
+            const classified = classifyError(error, { chip: this.options.chip });
+            this.dispatchEvent(new CustomEvent('error-classified', { detail: classified }));
+            throw error;
+        }
     }
 
     /** Flash only NVS config (no firmware) */

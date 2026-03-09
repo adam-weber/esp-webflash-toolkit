@@ -56,7 +56,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.js",
-    "test": "node tests/nvs-generator.test.js",
+    "test": "node tests/nvs-generator.test.js && node tests/config-schema.test.js && node tests/flash-states.test.js && node tests/error-catalog.test.js",
     "dev": "node bin/cli.js",
     "prepublishOnly": "npm run build && npm test",
     "docs:build": "npx honkit build docs",
