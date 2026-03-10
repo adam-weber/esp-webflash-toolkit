@@ -102,6 +102,15 @@ export const componentStyles = `
         background: var(--esp-border);
     }
 
+    /* Remove double-boxing when card is inside modal */
+    .modal-content .flasher-card {
+        background: none;
+        box-shadow: none;
+        padding: 0;
+        border-radius: 0;
+        max-width: none;
+    }
+
     h2 {
         font-size: 24px;
         font-weight: 600;

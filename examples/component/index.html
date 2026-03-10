@@ -10,29 +10,66 @@
             background: #f5f5f7;
             margin: 0;
             padding: 40px 20px;
+            display: flex;
+            justify-content: center;
         }
 
         .demo-section {
+            width: 100%;
             max-width: 600px;
-            margin: 0 auto 40px;
         }
 
-        h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
-        h2 { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: #1d1d1f; }
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin: 0 0 8px;
+            color: #1d1d1f;
+        }
 
-        .subtitle { color: #86868b; font-size: 15px; margin-bottom: 32px; }
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 32px 0 8px;
+            color: #1d1d1f;
+        }
+
+        p {
+            color: #86868b;
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 0 0 16px;
+        }
+
+        .subtitle {
+            font-size: 15px;
+            margin-bottom: 32px;
+        }
 
         pre {
             background: #1d1d1f;
-            color: #f5f5f7;
-            padding: 16px;
-            border-radius: 8px;
-            font-size: 13px;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 0 0 20px;
             overflow-x: auto;
-            margin-bottom: 20px;
+            line-height: 1.6;
         }
 
-        code { font-family: 'SF Mono', Monaco, monospace; }
+        pre code {
+            font-family: 'SF Mono', 'Fira Code', Monaco, 'Cascadia Code', monospace;
+            font-size: 13px;
+            color: #e5e5ea;
+        }
+
+        /* Syntax highlighting */
+        .hl-tag { color: #ff7b72; }
+        .hl-attr { color: #79c0ff; }
+        .hl-str { color: #a5d6ff; }
+        .hl-kw { color: #ff7b72; }
+        .hl-fn { color: #d2a8ff; }
+        .hl-obj { color: #79c0ff; }
+        .hl-prop { color: #79c0ff; }
+        .hl-cmt { color: #8b949e; }
+        .hl-punc { color: #e5e5ea; }
 
         .demo-card {
             background: white;
@@ -43,11 +80,12 @@
         }
 
         .demo-label {
-            font-size: 12px;
+            font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: #86868b;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
+            font-weight: 500;
         }
     </style>
 </head>
@@ -59,10 +97,10 @@
         <!-- Demo 1: Compact Mode (default) -->
         <h2>Compact Mode (default)</h2>
         <p>Renders a single button. Click to open the flash UI in a modal.</p>
-        <pre><code>&lt;esp-flasher
-    firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
-    chip="esp32s3"
-    fields="wifi"&gt;&lt;/esp-flasher&gt;</code></pre>
+        <pre><code><span class="hl-punc">&lt;</span><span class="hl-tag">esp-flasher</span>
+    <span class="hl-attr">firmware</span><span class="hl-punc">=</span><span class="hl-str">"https://github.com/user/repo/releases/latest/download/firmware.bin"</span>
+    <span class="hl-attr">chip</span><span class="hl-punc">=</span><span class="hl-str">"esp32s3"</span>
+    <span class="hl-attr">fields</span><span class="hl-punc">=</span><span class="hl-str">"wifi"</span><span class="hl-punc">&gt;&lt;/</span><span class="hl-tag">esp-flasher</span><span class="hl-punc">&gt;</span></code></pre>
 
         <div class="demo-card">
             <div class="demo-label">Live Demo</div>
@@ -75,11 +113,11 @@
         <!-- Demo 2: Full Mode -->
         <h2>Full Mode</h2>
         <p>Renders the complete flash UI inline as a card.</p>
-        <pre><code>&lt;esp-flasher
-    firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
-    chip="esp32"
-    fields="wifi,device_name"
-    mode="full"&gt;&lt;/esp-flasher&gt;</code></pre>
+        <pre><code><span class="hl-punc">&lt;</span><span class="hl-tag">esp-flasher</span>
+    <span class="hl-attr">firmware</span><span class="hl-punc">=</span><span class="hl-str">"https://github.com/user/repo/releases/latest/download/firmware.bin"</span>
+    <span class="hl-attr">chip</span><span class="hl-punc">=</span><span class="hl-str">"esp32"</span>
+    <span class="hl-attr">fields</span><span class="hl-punc">=</span><span class="hl-str">"wifi,device_name"</span>
+    <span class="hl-attr">mode</span><span class="hl-punc">=</span><span class="hl-str">"full"</span><span class="hl-punc">&gt;&lt;/</span><span class="hl-tag">esp-flasher</span><span class="hl-punc">&gt;</span></code></pre>
 
         <div class="demo-card">
             <div class="demo-label">Live Demo</div>
@@ -93,26 +131,29 @@
         <!-- Demo 3: Config URL -->
         <h2>Config URL</h2>
         <p>Load a v2 flash-config.json from a URL. Supports multiple variants, branding, and post-flash instructions.</p>
-        <pre><code>&lt;esp-flasher
-    config="https://raw.githubusercontent.com/user/repo/main/flash-config.json"
-    mode="full"&gt;&lt;/esp-flasher&gt;</code></pre>
+        <pre><code><span class="hl-punc">&lt;</span><span class="hl-tag">esp-flasher</span>
+    <span class="hl-attr">config</span><span class="hl-punc">=</span><span class="hl-str">"https://raw.githubusercontent.com/user/repo/main/flash-config.json"</span>
+    <span class="hl-attr">mode</span><span class="hl-punc">=</span><span class="hl-str">"full"</span><span class="hl-punc">&gt;&lt;/</span><span class="hl-tag">esp-flasher</span><span class="hl-punc">&gt;</span></code></pre>
 
         <!-- Demo 4: Events -->
         <h2>JavaScript Events</h2>
         <p>Listen for events on the element.</p>
-        <pre><code>const el = document.querySelector('esp-flasher');
-el.addEventListener('esp-flasher:connected', (e) =&gt; {
-    console.log('Connected:', e.detail.chipType);
-});
-el.addEventListener('esp-flasher:complete', () =&gt; {
-    console.log('Flash complete!');
-});
-el.addEventListener('esp-flasher:error', (e) =&gt; {
-    console.log('Error:', e.detail.message);
+        <pre><code><span class="hl-kw">const</span> el = document.<span class="hl-fn">querySelector</span>(<span class="hl-str">'esp-flasher'</span>);
+
+el.<span class="hl-fn">addEventListener</span>(<span class="hl-str">'esp-flasher:connected'</span>, (e) =&gt; {
+    console.<span class="hl-fn">log</span>(<span class="hl-str">'Connected:'</span>, e.detail.chipType);
 });
 
-// Programmatic access to internal ESPFlasher
-el.flasher.setConfig({ wifi_ssid: 'MyNetwork' });</code></pre>
+el.<span class="hl-fn">addEventListener</span>(<span class="hl-str">'esp-flasher:complete'</span>, () =&gt; {
+    console.<span class="hl-fn">log</span>(<span class="hl-str">'Flash complete!'</span>);
+});
+
+el.<span class="hl-fn">addEventListener</span>(<span class="hl-str">'esp-flasher:error'</span>, (e) =&gt; {
+    console.<span class="hl-fn">log</span>(<span class="hl-str">'Error:'</span>, e.detail.message);
+});
+
+<span class="hl-cmt">// Programmatic access to internal ESPFlasher</span>
+el.flasher.<span class="hl-fn">setConfig</span>({ <span class="hl-prop">wifi_ssid</span>: <span class="hl-str">'MyNetwork'</span> });</code></pre>
     </div>
 
     <!-- Load the component bundle -->

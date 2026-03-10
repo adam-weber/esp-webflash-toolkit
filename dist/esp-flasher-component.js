@@ -139,6 +139,15 @@ var ESPFlasherComponent = (() => {
         background: var(--esp-border);
     }
 
+    /* Remove double-boxing when card is inside modal */
+    .modal-content .flasher-card {
+        background: none;
+        box-shadow: none;
+        padding: 0;
+        border-radius: 0;
+        max-width: none;
+    }
+
     h2 {
         font-size: 24px;
         font-weight: 600;
@@ -1915,7 +1924,7 @@ var ESPFlasherComponent = (() => {
       this._clearContent();
       const btn = document.createElement("button");
       btn.className = "flasher-compact-btn";
-      btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M13 2.05v2.02c3.95.49 7 3.85 7 7.93 0 4.42-3.58 8-8 8s-8-3.58-8-8c0-4.08 3.05-7.44 7-7.93V2.05C6.05 2.55 2 7.1 2 12.5c0 5.52 4.48 10 10 10s10-4.48 10-10c0-5.4-4.05-9.95-9-10.45zM11 8V1h2v7h-2z"/></svg> Flash Firmware`;
+      btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg> Flash Firmware`;
       btn.onclick = () => this._openModal();
       this.shadowRoot.appendChild(btn);
     }
