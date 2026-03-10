@@ -1,0 +1,32 @@
+name: Deploy Flash Page
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: adam-weber/esp-webflash-toolkit@v1
+        id: deployment
+        with:
+          config: flash-config.json
+          # output-dir: _flasher    # default
+          # deploy: true            # default
+          # component-version: latest  # default

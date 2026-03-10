@@ -1,0 +1,64 @@
+name: 'ESP WebFlash Toolkit'
+description: 'Generate and deploy a browser-based ESP32 firmware flash page from a flash-config.json file'
+branding:
+  icon: 'zap'
+  color: 'blue'
+
+inputs:
+  config:
+    description: 'Path to flash-config.json'
+    required: false
+    default: 'flash-config.json'
+  output-dir:
+    description: 'Output directory for generated page'
+    required: false
+    default: '_flasher'
+  deploy:
+    description: 'Deploy to GitHub Pages (true/false)'
+    required: false
+    default: 'true'
+  component-version:
+    description: 'Version of esp-webflash-toolkit to use'
+    required: false
+    default: 'latest'
+
+outputs:
+  page-url:
+    description: 'URL of the deployed flash page'
+    value: ${{ steps.deploy.outputs.page_url }}
+  badge-markdown:
+    description: 'Shields.io badge markdown for README'
+    value: ${{ steps.generate.outputs.badge_markdown }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install esp-webflash-toolkit
+      shell: bash
+      run: npm install esp-webflash-toolkit@${{ inputs.component-version }}
+
+    - name: Generate flash page
+      id: generate
+      shell: bash
+      run: |
+        npx esp-webflash-toolkit generate "${{ inputs.config }}" --output "${{ inputs.output-dir }}"
+        echo "badge_markdown=$(cat <<'BADGE'
+        [![Flash Firmware](https://img.shields.io/badge/Flash-Firmware-blue)](${{ github.event.repository.html_url }})
+        BADGE
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Upload Pages artifact
+      if: inputs.deploy == 'true'
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ${{ inputs.output-dir }}
+
+    - name: Deploy to GitHub Pages
+      if: inputs.deploy == 'true'
+      id: deploy
+      uses: actions/deploy-pages@v4

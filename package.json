@@ -38,11 +38,15 @@
     "./nvs-generator": {
       "import": "./dist/core/nvs-generator.js"
     },
+    "./component": {
+      "import": "./dist/components/esp-flasher.js"
+    },
     "./dist/*": "./dist/*"
   },
   "browser": {
     ".": "./dist/esp-webflash-toolkit.min.js",
-    "./full": "./dist/esp-webflash-toolkit-full.min.js"
+    "./full": "./dist/esp-webflash-toolkit-full.min.js",
+    "./component": "./dist/esp-flasher-component.min.js"
   },
   "bin": {
     "esp-webflash-toolkit": "./bin/cli.js"
@@ -51,12 +55,15 @@
     "dist/",
     "templates/",
     "bin/",
+    "scripts/generate-page.js",
+    "src/core/config-schema.js",
+    "action.yml",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "node scripts/build.js",
-    "test": "node tests/nvs-generator.test.js",
+    "test": "node tests/nvs-generator.test.js && node tests/config-schema.test.js && node tests/flash-states.test.js && node tests/error-catalog.test.js",
     "dev": "node bin/cli.js",
     "prepublishOnly": "npm run build && npm test",
     "docs:build": "npx honkit build docs",

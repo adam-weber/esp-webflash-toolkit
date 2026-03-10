@@ -1,4 +1,4 @@
-var ESPWebFlash = (() => {
+var ESPFlasherComponent = (() => {
   var __create = Object.create;
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -33,28 +33,646 @@ var ESPWebFlash = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // src/core/index.js
-  var index_exports = {};
-  __export(index_exports, {
-    ConfigStore: () => ConfigStore,
-    DeviceConnection: () => DeviceConnection,
-    ESPFlasher: () => ESPFlasher,
-    FieldPresets: () => FieldPresets,
-    FirmwareFlasher: () => FirmwareFlasher,
-    FlashStateLabels: () => FlashStateLabels,
-    FlashStateMachine: () => FlashStateMachine,
-    FlashStates: () => FlashStates,
-    NVSGenerator: () => NVSGenerator,
-    VALID_TRANSITIONS: () => VALID_TRANSITIONS,
-    classifyError: () => classifyError,
-    expandFieldPresets: () => expandFieldPresets,
-    flashDevice: () => flashDevice,
-    isBrowserSupported: () => isBrowserSupported,
-    isMobile: () => isMobile,
-    normalizeConfig: () => normalizeConfig,
-    resolveVariantFirmwareUrl: () => resolveVariantFirmwareUrl,
-    validateConfig: () => validateConfig
+  // src/bundle-component.js
+  var bundle_component_exports = {};
+  __export(bundle_component_exports, {
+    ESPFlasherElement: () => ESPFlasherElement
   });
+
+  // src/components/styles.js
+  var componentStyles = `
+    :host {
+        --esp-primary: #0071e3;
+        --esp-primary-hover: #0077ed;
+        --esp-bg: #f5f5f7;
+        --esp-card-bg: #ffffff;
+        --esp-text: #1d1d1f;
+        --esp-text-secondary: #86868b;
+        --esp-border: #d2d2d7;
+        --esp-badge-bg: #e8e8ed;
+        --esp-success: #34c759;
+        --esp-error: #ff453a;
+        --esp-warning: #ff9f0a;
+        --esp-info: #4fc3f7;
+        display: block;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    .flasher-card {
+        background: var(--esp-card-bg);
+        border-radius: 16px;
+        padding: 32px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        max-width: 480px;
+    }
+
+    .flasher-compact-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
+        background: var(--esp-primary);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+        font-family: inherit;
+    }
+
+    .flasher-compact-btn:hover {
+        background: var(--esp-primary-hover);
+    }
+
+    .flasher-compact-btn svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+    }
+
+    /* Modal overlay */
+    .modal-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        padding: 20px;
+    }
+
+    .modal-content {
+        background: var(--esp-card-bg);
+        border-radius: 16px;
+        padding: 32px;
+        max-width: 480px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        position: relative;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .modal-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: var(--esp-badge-bg);
+        border: none;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        font-size: 18px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--esp-text-secondary);
+    }
+
+    .modal-close:hover {
+        background: var(--esp-border);
+    }
+
+    h2 {
+        font-size: 24px;
+        font-weight: 600;
+        margin: 0 0 8px 0;
+        color: var(--esp-text);
+    }
+
+    .subtitle {
+        color: var(--esp-text-secondary);
+        font-size: 14px;
+        margin-bottom: 24px;
+    }
+
+    .chip-badge {
+        display: inline-block;
+        background: var(--esp-badge-bg);
+        color: var(--esp-text);
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        margin-left: 6px;
+    }
+
+    .branding-logo {
+        display: block;
+        max-height: 40px;
+        max-width: 180px;
+        margin-bottom: 12px;
+    }
+
+    /* Status */
+    .status-box {
+        background: var(--esp-bg);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+        text-align: center;
+    }
+
+    .status-box.connected { background: rgba(0, 113, 227, 0.08); }
+    .status-box.flashing { background: rgba(255, 149, 0, 0.08); }
+    .status-box.success { background: rgba(52, 199, 89, 0.08); }
+    .status-box.error { background: rgba(255, 59, 48, 0.08); }
+
+    .status-text {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--esp-text);
+        margin-bottom: 2px;
+    }
+
+    .status-subtext {
+        font-size: 13px;
+        color: var(--esp-text-secondary);
+    }
+
+    .stage-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--esp-text-secondary);
+        margin-bottom: 4px;
+    }
+
+    /* Buttons */
+    .btn {
+        width: 100%;
+        padding: 14px;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 10px;
+        font-family: inherit;
+    }
+
+    .btn-primary {
+        background: var(--esp-primary);
+        color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background: var(--esp-primary-hover);
+    }
+
+    .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    /* Progress */
+    .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: var(--esp-badge-bg);
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 12px 0;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: var(--esp-primary);
+        width: 0%;
+        transition: width 0.3s;
+    }
+
+    /* Form */
+    .config-section {
+        margin-bottom: 20px;
+    }
+
+    .config-section h3 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--esp-text-secondary);
+        margin: 0 0 10px 0;
+    }
+
+    .form-group {
+        margin-bottom: 14px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 14px;
+        color: var(--esp-text);
+        margin-bottom: 4px;
+    }
+
+    .form-group input, .form-group select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--esp-border);
+        border-radius: 8px;
+        font-size: 14px;
+        background: var(--esp-card-bg);
+        font-family: inherit;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+        outline: none;
+        border-color: var(--esp-primary);
+    }
+
+    /* Variant selector */
+    .variant-selector {
+        margin-bottom: 16px;
+    }
+
+    .variant-selector select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--esp-border);
+        border-radius: 8px;
+        font-size: 14px;
+        background: var(--esp-card-bg);
+        font-family: inherit;
+    }
+
+    .variant-description {
+        font-size: 12px;
+        color: var(--esp-text-secondary);
+        margin-top: 4px;
+    }
+
+    /* Recovery / PostFlash */
+    .recovery-steps, .post-flash-steps {
+        text-align: left;
+        font-size: 13px;
+        color: var(--esp-text);
+        margin: 10px 0 0;
+        padding-left: 18px;
+    }
+
+    .recovery-steps li, .post-flash-steps li {
+        margin-bottom: 5px;
+        line-height: 1.4;
+    }
+
+    .post-flash-link {
+        display: inline-block;
+        color: var(--esp-primary);
+        text-decoration: none;
+        font-weight: 500;
+        margin-top: 8px;
+    }
+
+    /* Log */
+    .log {
+        background: #1d1d1f;
+        color: #fff;
+        border-radius: 8px;
+        padding: 12px;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 11px;
+        height: 120px;
+        overflow-y: auto;
+        margin-top: 16px;
+    }
+
+    .log-line { margin-bottom: 3px; }
+    .log-line.info { color: var(--esp-info); }
+    .log-line.success { color: var(--esp-success); }
+    .log-line.error { color: var(--esp-error); }
+    .log-line.warning { color: var(--esp-warning); }
+    .log-line.debug { color: var(--esp-text-secondary); }
+
+    /* Mobile block */
+    .mobile-block {
+        text-align: center;
+        padding: 32px 16px;
+    }
+
+    .mobile-block h2 { font-size: 20px; margin: 0 0 10px; }
+    .mobile-block p { color: var(--esp-text-secondary); font-size: 14px; margin-bottom: 20px; }
+
+    .unsupported-block {
+        text-align: center;
+        padding: 32px 16px;
+    }
+
+    .unsupported-block h2 { font-size: 20px; margin: 0 0 10px; }
+    .unsupported-block p { color: var(--esp-text-secondary); font-size: 14px; }
+
+    .footer {
+        text-align: center;
+        margin-top: 16px;
+        font-size: 12px;
+        color: var(--esp-text-secondary);
+    }
+
+    .footer a {
+        color: var(--esp-primary);
+        text-decoration: none;
+    }
+`;
+
+  // src/core/config-store.js
+  var FieldPresets = {
+    wifi: [
+      { key: "wifi_ssid", label: "WiFi SSID", type: "text", required: true },
+      { key: "wifi_pass", label: "WiFi Password", type: "password", required: true }
+    ],
+    mqtt: [
+      { key: "mqtt_host", label: "MQTT Host", type: "text" },
+      { key: "mqtt_user", label: "MQTT Username", type: "text" },
+      { key: "mqtt_pass", label: "MQTT Password", type: "password" }
+    ],
+    device_name: [
+      { key: "device_name", label: "Device Name", type: "text" }
+    ]
+  };
+  function expandFieldPresets(fields) {
+    if (!fields) return [];
+    return fields.flatMap(
+      (f) => typeof f === "string" && FieldPresets[f] ? FieldPresets[f] : [f]
+    );
+  }
+  function flattenConfigSections(sections) {
+    if (!sections) return [];
+    return sections.flatMap(
+      (section) => (section.fields || []).map((f) => ({
+        key: f.nvsKey || f.key || f.id,
+        label: f.label,
+        type: f.type || "text",
+        placeholder: f.placeholder,
+        required: f.required || false,
+        default: f.default,
+        pattern: f.pattern,
+        help: f.help,
+        section: section.title || section.id
+      }))
+    );
+  }
+  var ConfigStore = class extends EventTarget {
+    constructor(initialConfig = {}) {
+      super();
+      this.data = { ...initialConfig };
+      this.schema = null;
+    }
+    /**
+     * Set field schema
+     * @param {Field[]} fields
+     */
+    setSchema(fields) {
+      this.schema = fields;
+      for (const f of fields) {
+        if (f.default !== void 0 && this.data[f.key] === void 0) {
+          this.data[f.key] = f.default;
+        }
+      }
+      this.dispatchEvent(new CustomEvent("schema-changed", { detail: { schema: fields } }));
+    }
+    /** @returns {Field[]|null} */
+    getSchema() {
+      return this.schema;
+    }
+    /** Set a value */
+    set(key, value) {
+      this.data[key] = value;
+      this.dispatchEvent(new CustomEvent("change", { detail: { key, value } }));
+    }
+    /** Get a value */
+    get(key) {
+      return this.data[key];
+    }
+    /** Get all values */
+    getAll() {
+      return { ...this.data };
+    }
+    /** Set multiple values */
+    setAll(values) {
+      Object.assign(this.data, values);
+      this.dispatchEvent(new CustomEvent("change", { detail: { values } }));
+    }
+    /**
+     * Validate required fields
+     * @returns {{valid: boolean, missing: string[]}}
+     */
+    validate() {
+      if (!this.schema) return { valid: true, missing: [] };
+      const missing = this.schema.filter((f) => f.required && !this.data[f.key]).map((f) => f.key);
+      return { valid: missing.length === 0, missing };
+    }
+    /**
+     * Get data formatted for NVS (non-empty string values only)
+     * @returns {Object<string, string>}
+     */
+    toNVS() {
+      const result = {};
+      for (const [k, v] of Object.entries(this.data)) {
+        if (v !== void 0 && v !== null && v !== "") {
+          result[k] = String(v);
+        }
+      }
+      return result;
+    }
+    /** Serialize for storage */
+    serialize() {
+      return JSON.stringify(this.data);
+    }
+    /** Load from storage */
+    load(data) {
+      this.data = typeof data === "string" ? JSON.parse(data) : { ...data };
+    }
+  };
+
+  // src/components/renderer.js
+  function renderStatusBox() {
+    const container = document.createElement("div");
+    container.className = "status-box";
+    const stageLabel = document.createElement("div");
+    stageLabel.className = "stage-label";
+    const statusText = document.createElement("div");
+    statusText.className = "status-text";
+    statusText.textContent = "Ready to connect";
+    const statusSubtext = document.createElement("div");
+    statusSubtext.className = "status-subtext";
+    statusSubtext.textContent = "Click Connect to begin";
+    container.append(stageLabel, statusText, statusSubtext);
+    return { container, stageLabel, statusText, statusSubtext };
+  }
+  function renderProgressBar() {
+    const container = document.createElement("div");
+    container.className = "progress-bar";
+    container.style.display = "none";
+    const fill = document.createElement("div");
+    fill.className = "progress-fill";
+    container.appendChild(fill);
+    return { container, fill };
+  }
+  function renderConfigForm(fields) {
+    const container = document.createElement("div");
+    const inputs = /* @__PURE__ */ new Map();
+    if (!fields || fields.length === 0) return { container, inputs };
+    const expanded = expandFieldPresets(fields);
+    if (expanded.length === 0) return { container, inputs };
+    const section = document.createElement("div");
+    section.className = "config-section";
+    const heading = document.createElement("h3");
+    heading.textContent = "Configuration";
+    section.appendChild(heading);
+    for (const field of expanded) {
+      const group = document.createElement("div");
+      group.className = "form-group";
+      const label = document.createElement("label");
+      label.textContent = field.label || field.key;
+      group.appendChild(label);
+      const input = document.createElement("input");
+      input.type = field.type || "text";
+      input.placeholder = field.placeholder || "";
+      if (field.default) input.value = field.default;
+      if (field.required) input.required = true;
+      if (field.pattern) input.pattern = field.pattern;
+      input.dataset.nvsKey = field.key;
+      group.appendChild(input);
+      if (field.help) {
+        const help = document.createElement("span");
+        help.className = "help-text";
+        help.textContent = field.help;
+        group.appendChild(help);
+      }
+      section.appendChild(group);
+      inputs.set(field.key, input);
+    }
+    container.appendChild(section);
+    return { container, inputs };
+  }
+  function renderVariantSelector(variants) {
+    const container = document.createElement("div");
+    container.className = "variant-selector";
+    const label = document.createElement("label");
+    label.textContent = "Firmware Variant";
+    label.style.cssText = "display: block; font-size: 14px; margin-bottom: 4px;";
+    container.appendChild(label);
+    const select = document.createElement("select");
+    for (let i = 0; i < variants.length; i++) {
+      const option = document.createElement("option");
+      option.value = i;
+      option.textContent = variants[i].name || variants[i].id || `Variant ${i + 1}`;
+      select.appendChild(option);
+    }
+    container.appendChild(select);
+    const description = document.createElement("div");
+    description.className = "variant-description";
+    if (variants[0].description) {
+      description.textContent = variants[0].description;
+    }
+    container.appendChild(description);
+    return { container, select, description };
+  }
+  function renderPostFlash(postFlash) {
+    const frag = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "status-text";
+    title.textContent = postFlash.title || "Flash Complete!";
+    frag.appendChild(title);
+    if (postFlash.steps && postFlash.steps.length > 0) {
+      const ol = document.createElement("ol");
+      ol.className = "post-flash-steps";
+      for (const step of postFlash.steps) {
+        const li = document.createElement("li");
+        li.textContent = step;
+        ol.appendChild(li);
+      }
+      frag.appendChild(ol);
+    }
+    if (postFlash.link) {
+      const a = document.createElement("a");
+      a.className = "post-flash-link";
+      a.href = postFlash.link.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = postFlash.link.label;
+      frag.appendChild(a);
+    }
+    return frag;
+  }
+  function renderErrorRecovery(classified) {
+    const frag = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "status-text";
+    title.textContent = classified.title;
+    frag.appendChild(title);
+    const ol = document.createElement("ol");
+    ol.className = "recovery-steps";
+    for (const step of classified.steps) {
+      const li = document.createElement("li");
+      li.textContent = step;
+      ol.appendChild(li);
+    }
+    frag.appendChild(ol);
+    return frag;
+  }
+  function renderBrowserWarning(info) {
+    const container = document.createElement("div");
+    container.className = "unsupported-block";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Browser Not Supported";
+    container.appendChild(h2);
+    const p = document.createElement("p");
+    p.textContent = info.reason;
+    container.appendChild(p);
+    return container;
+  }
+  function renderMobileBlock() {
+    const container = document.createElement("div");
+    container.className = "mobile-block";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Desktop Required";
+    container.appendChild(h2);
+    const p = document.createElement("p");
+    p.textContent = "Flashing firmware requires a USB connection and a desktop browser with Web Serial support (Chrome, Edge, or Opera).";
+    container.appendChild(p);
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "btn btn-primary";
+    copyBtn.textContent = "Copy Link";
+    container.appendChild(copyBtn);
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "btn";
+    shareBtn.style.background = "#e8e8ed";
+    shareBtn.style.color = "#1d1d1f";
+    shareBtn.textContent = "Share Link";
+    container.appendChild(shareBtn);
+    return { container, copyBtn, shareBtn };
+  }
+  function renderLog() {
+    const container = document.createElement("div");
+    container.className = "log";
+    return container;
+  }
+  function renderModal(content) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "modal-content";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "modal-close";
+    closeBtn.innerHTML = "&times;";
+    modal.appendChild(closeBtn);
+    modal.appendChild(content);
+    overlay.appendChild(modal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+    return { overlay, closeBtn };
+  }
 
   // src/core/device-connection.js
   var DeviceConnection = class extends EventTarget {
@@ -687,116 +1305,6 @@ var ESPWebFlash = (() => {
     }
   };
 
-  // src/core/config-store.js
-  var FieldPresets = {
-    wifi: [
-      { key: "wifi_ssid", label: "WiFi SSID", type: "text", required: true },
-      { key: "wifi_pass", label: "WiFi Password", type: "password", required: true }
-    ],
-    mqtt: [
-      { key: "mqtt_host", label: "MQTT Host", type: "text" },
-      { key: "mqtt_user", label: "MQTT Username", type: "text" },
-      { key: "mqtt_pass", label: "MQTT Password", type: "password" }
-    ],
-    device_name: [
-      { key: "device_name", label: "Device Name", type: "text" }
-    ]
-  };
-  function expandFieldPresets(fields) {
-    if (!fields) return [];
-    return fields.flatMap(
-      (f) => typeof f === "string" && FieldPresets[f] ? FieldPresets[f] : [f]
-    );
-  }
-  function flattenConfigSections(sections) {
-    if (!sections) return [];
-    return sections.flatMap(
-      (section) => (section.fields || []).map((f) => ({
-        key: f.nvsKey || f.key || f.id,
-        label: f.label,
-        type: f.type || "text",
-        placeholder: f.placeholder,
-        required: f.required || false,
-        default: f.default,
-        pattern: f.pattern,
-        help: f.help,
-        section: section.title || section.id
-      }))
-    );
-  }
-  var ConfigStore = class extends EventTarget {
-    constructor(initialConfig = {}) {
-      super();
-      this.data = { ...initialConfig };
-      this.schema = null;
-    }
-    /**
-     * Set field schema
-     * @param {Field[]} fields
-     */
-    setSchema(fields) {
-      this.schema = fields;
-      for (const f of fields) {
-        if (f.default !== void 0 && this.data[f.key] === void 0) {
-          this.data[f.key] = f.default;
-        }
-      }
-      this.dispatchEvent(new CustomEvent("schema-changed", { detail: { schema: fields } }));
-    }
-    /** @returns {Field[]|null} */
-    getSchema() {
-      return this.schema;
-    }
-    /** Set a value */
-    set(key, value) {
-      this.data[key] = value;
-      this.dispatchEvent(new CustomEvent("change", { detail: { key, value } }));
-    }
-    /** Get a value */
-    get(key) {
-      return this.data[key];
-    }
-    /** Get all values */
-    getAll() {
-      return { ...this.data };
-    }
-    /** Set multiple values */
-    setAll(values) {
-      Object.assign(this.data, values);
-      this.dispatchEvent(new CustomEvent("change", { detail: { values } }));
-    }
-    /**
-     * Validate required fields
-     * @returns {{valid: boolean, missing: string[]}}
-     */
-    validate() {
-      if (!this.schema) return { valid: true, missing: [] };
-      const missing = this.schema.filter((f) => f.required && !this.data[f.key]).map((f) => f.key);
-      return { valid: missing.length === 0, missing };
-    }
-    /**
-     * Get data formatted for NVS (non-empty string values only)
-     * @returns {Object<string, string>}
-     */
-    toNVS() {
-      const result = {};
-      for (const [k, v] of Object.entries(this.data)) {
-        if (v !== void 0 && v !== null && v !== "") {
-          result[k] = String(v);
-        }
-      }
-      return result;
-    }
-    /** Serialize for storage */
-    serialize() {
-      return JSON.stringify(this.data);
-    }
-    /** Load from storage */
-    load(data) {
-      this.data = typeof data === "string" ? JSON.parse(data) : { ...data };
-    }
-  };
-
   // src/core/flash-states.js
   var FlashStates = {
     IDLE: "idle",
@@ -1185,43 +1693,6 @@ var ESPWebFlash = (() => {
       }
     }
   };
-  async function flashDevice(options) {
-    const {
-      firmware,
-      config,
-      chip,
-      onProgress,
-      onLog,
-      firmwareOffset = 65536,
-      nvsOffset = 36864
-    } = options;
-    if (!firmware) {
-      throw new Error("firmware URL is required");
-    }
-    const flasher = new ESPFlasher({
-      chip,
-      firmwareUrl: firmware,
-      firmwareOffset,
-      nvsOffset
-    });
-    if (onProgress) {
-      flasher.addEventListener("progress", (e) => onProgress(e.detail.percent));
-    }
-    if (onLog) {
-      flasher.addEventListener("log", (e) => onLog(e.detail.message, e.detail.level));
-    }
-    try {
-      const deviceInfo = await flasher.connect();
-      if (config && Object.keys(config).length > 0) {
-        flasher.setConfig(config);
-      }
-      await flasher.flash();
-      await flasher.reset();
-      return deviceInfo;
-    } finally {
-      flasher.dispose();
-    }
-  }
 
   // src/core/config-schema.js
   function normalizeConfig(json) {
@@ -1261,31 +1732,420 @@ var ESPWebFlash = (() => {
     }
     return firmware;
   }
-  function validateConfig(config) {
-    const errors = [];
-    if (!config.name) {
-      errors.push('Missing "name" field');
+
+  // src/components/esp-flasher.js
+  var ESPFlasherElement = class extends HTMLElement {
+    static get observedAttributes() {
+      return ["config", "firmware", "chip", "fields", "mode", "theme", "config-data"];
     }
-    if (!config.variants || config.variants.length === 0) {
-      errors.push("At least one variant is required");
-    } else {
-      for (let i = 0; i < config.variants.length; i++) {
-        const v = config.variants[i];
-        if (!v.firmware) {
-          errors.push(`Variant ${i} ("${v.name || v.id || i}") missing "firmware" field`);
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this._flasher = null;
+      this._v2Config = null;
+      this._activeVariant = null;
+      this._refs = {};
+      this._initialized = false;
+    }
+    /** Expose internal ESPFlasher for programmatic access */
+    get flasher() {
+      return this._flasher;
+    }
+    connectedCallback() {
+      if (this._initialized) return;
+      this._initialized = true;
+      this._render();
+    }
+    disconnectedCallback() {
+      if (this._flasher) {
+        this._flasher.dispose();
+        this._flasher = null;
+      }
+    }
+    attributeChangedCallback(name, oldVal, newVal) {
+      if (!this._initialized) return;
+      if (oldVal === newVal) return;
+      if (name === "config") {
+        this._fetchAndApplyConfig(newVal);
+      } else if (name === "config-data") {
+        try {
+          const json = JSON.parse(newVal);
+          this._applyConfig(json);
+        } catch (e) {
+          console.error("<esp-flasher> invalid config-data JSON:", e);
+        }
+      } else {
+        this._buildFromAttributes();
+      }
+    }
+    async _render() {
+      const style = document.createElement("style");
+      style.textContent = componentStyles;
+      this.shadowRoot.appendChild(style);
+      const browserInfo = isBrowserSupported();
+      const mobile = isMobile();
+      if (mobile) {
+        const { container, copyBtn, shareBtn } = renderMobileBlock();
+        this.shadowRoot.appendChild(container);
+        const pageUrl = window.location.href;
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(pageUrl).then(() => {
+            copyBtn.textContent = "Copied!";
+            setTimeout(() => {
+              copyBtn.textContent = "Copy Link";
+            }, 2e3);
+          });
+        };
+        shareBtn.onclick = () => {
+          if (navigator.share) {
+            navigator.share({ title: "ESP Web Flasher", url: pageUrl });
+          } else {
+            navigator.clipboard.writeText(pageUrl);
+            shareBtn.textContent = "Copied!";
+            setTimeout(() => {
+              shareBtn.textContent = "Share Link";
+            }, 2e3);
+          }
+        };
+        return;
+      }
+      if (!browserInfo.supported) {
+        this.shadowRoot.appendChild(renderBrowserWarning(browserInfo));
+        return;
+      }
+      const configUrl = this.getAttribute("config");
+      const configData = this.getAttribute("config-data");
+      if (configUrl) {
+        await this._fetchAndApplyConfig(configUrl);
+      } else if (configData) {
+        try {
+          this._applyConfig(JSON.parse(configData));
+        } catch (e) {
+          console.error("<esp-flasher> invalid config-data JSON:", e);
+        }
+      } else {
+        this._buildFromAttributes();
+      }
+    }
+    async _fetchAndApplyConfig(url) {
+      try {
+        let response;
+        try {
+          response = await fetch(url);
+          if (!response.ok) throw new Error(`${response.status}`);
+        } catch (e) {
+          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+          response = await fetch(proxyUrl);
+          if (!response.ok) throw new Error(`Failed to load config: ${response.status}`);
+        }
+        const json = await response.json();
+        this._applyConfig(json);
+      } catch (e) {
+        console.error("<esp-flasher> failed to load config:", e);
+        this._renderError(`Failed to load config: ${e.message}`);
+      }
+    }
+    _applyConfig(json) {
+      this._v2Config = normalizeConfig(json);
+      const variant = this._v2Config.variants[0];
+      this._activeVariant = variant;
+      if (this._v2Config.branding) {
+        this._applyBranding(this._v2Config.branding);
+      }
+      this._initFlasher(variant);
+    }
+    _buildFromAttributes() {
+      const firmware = this.getAttribute("firmware");
+      const chip = this.getAttribute("chip") || "esp32";
+      const fieldsAttr = this.getAttribute("fields");
+      const fields = fieldsAttr ? fieldsAttr.split(",").map((f) => f.trim()) : [];
+      this._v2Config = {
+        version: 2,
+        name: "ESP Firmware",
+        variants: [{
+          id: "default",
+          name: "Default",
+          firmware,
+          chip,
+          fields
+        }]
+      };
+      this._activeVariant = this._v2Config.variants[0];
+      this._initFlasher(this._activeVariant);
+    }
+    _applyBranding(branding) {
+      if (branding.primaryColor) {
+        this.style.setProperty("--esp-primary", branding.primaryColor);
+        const hex = branding.primaryColor.replace("#", "");
+        const r = Math.min(255, parseInt(hex.substr(0, 2), 16) + 10);
+        const g = Math.min(255, parseInt(hex.substr(2, 2), 16) + 10);
+        const b = Math.min(255, parseInt(hex.substr(4, 2), 16) + 10);
+        this.style.setProperty(
+          "--esp-primary-hover",
+          `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        );
+      }
+      if (branding.theme === "dark") {
+        this.style.setProperty("--esp-bg", "#1d1d1f");
+        this.style.setProperty("--esp-card-bg", "#2c2c2e");
+        this.style.setProperty("--esp-text", "#f5f5f7");
+      }
+    }
+    _initFlasher(variant) {
+      if (this._flasher) {
+        this._flasher.dispose();
+      }
+      const resolvedUrl = resolveVariantFirmwareUrl(variant, this._v2Config);
+      const fields = variant.fields || [];
+      this._flasher = new ESPFlasher({
+        chip: variant.chip || "esp32",
+        firmwareUrl: resolvedUrl,
+        firmwareOffset: variant.offset ? typeof variant.offset === "string" ? parseInt(variant.offset, 16) : variant.offset : 65536,
+        nvsOffset: variant.nvsOffset ? typeof variant.nvsOffset === "string" ? parseInt(variant.nvsOffset, 16) : variant.nvsOffset : 36864,
+        fields
+      });
+      const mode = this.getAttribute("mode");
+      if (mode === "full") {
+        this._renderFull();
+      } else {
+        this._renderCompact();
+      }
+    }
+    _renderCompact() {
+      this._clearContent();
+      const btn = document.createElement("button");
+      btn.className = "flasher-compact-btn";
+      btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M13 2.05v2.02c3.95.49 7 3.85 7 7.93 0 4.42-3.58 8-8 8s-8-3.58-8-8c0-4.08 3.05-7.44 7-7.93V2.05C6.05 2.55 2 7.1 2 12.5c0 5.52 4.48 10 10 10s10-4.48 10-10c0-5.4-4.05-9.95-9-10.45zM11 8V1h2v7h-2z"/></svg> Flash Firmware`;
+      btn.onclick = () => this._openModal();
+      this.shadowRoot.appendChild(btn);
+    }
+    _renderFull() {
+      this._clearContent();
+      const content = this._buildFlashUI();
+      this.shadowRoot.appendChild(content);
+    }
+    _openModal() {
+      const content = this._buildFlashUI();
+      const { overlay, closeBtn } = renderModal(content);
+      closeBtn.onclick = () => overlay.remove();
+      this.shadowRoot.appendChild(overlay);
+    }
+    _buildFlashUI() {
+      const wrapper = document.createElement("div");
+      wrapper.className = "flasher-card";
+      if (this._v2Config?.branding?.logo) {
+        const logo = document.createElement("img");
+        logo.className = "branding-logo";
+        logo.src = this._v2Config.branding.logo;
+        logo.alt = "Logo";
+        wrapper.appendChild(logo);
+      }
+      const title = document.createElement("h2");
+      title.textContent = this._v2Config?.name || "ESP Firmware";
+      wrapper.appendChild(title);
+      const chip = this._activeVariant?.chip || "esp32";
+      const subtitle = document.createElement("div");
+      subtitle.className = "subtitle";
+      subtitle.innerHTML = `Flash firmware to your device <span class="chip-badge">${chip.toUpperCase()}</span>`;
+      wrapper.appendChild(subtitle);
+      this._refs.subtitle = subtitle;
+      if (this._v2Config && this._v2Config.variants.length > 1) {
+        const vs = renderVariantSelector(this._v2Config.variants);
+        wrapper.appendChild(vs.container);
+        vs.select.onchange = () => {
+          const idx = parseInt(vs.select.value);
+          const variant = this._v2Config.variants[idx];
+          this._activeVariant = variant;
+          vs.description.textContent = variant.description || "";
+          const newChip = variant.chip || this._v2Config.variants[0].chip || "esp32";
+          this._refs.subtitle.innerHTML = `Flash firmware to your device <span class="chip-badge">${newChip.toUpperCase()}</span>`;
+          const resolvedUrl = resolveVariantFirmwareUrl(variant, this._v2Config);
+          this._flasher.setVariant(variant, resolvedUrl);
+          this._rebuildConfigForm(wrapper, variant.fields || []);
+        };
+      }
+      const fields = this._activeVariant?.fields || [];
+      const { container: configContainer, inputs } = renderConfigForm(fields);
+      wrapper.appendChild(configContainer);
+      this._refs.configContainer = configContainer;
+      this._refs.configInputs = inputs;
+      for (const [key, input] of inputs) {
+        input.addEventListener("input", () => {
+          this._flasher.setConfig({ [key]: input.value });
+        });
+      }
+      const status = renderStatusBox();
+      wrapper.appendChild(status.container);
+      this._refs.statusBox = status.container;
+      this._refs.stageLabel = status.stageLabel;
+      this._refs.statusText = status.statusText;
+      this._refs.statusSubtext = status.statusSubtext;
+      const progress = renderProgressBar();
+      wrapper.appendChild(progress.container);
+      this._refs.progressBar = progress.container;
+      this._refs.progressFill = progress.fill;
+      const connectBtn = document.createElement("button");
+      connectBtn.className = "btn btn-primary";
+      connectBtn.textContent = "Connect Device";
+      wrapper.appendChild(connectBtn);
+      this._refs.connectBtn = connectBtn;
+      const flashBtn = document.createElement("button");
+      flashBtn.className = "btn btn-primary";
+      flashBtn.textContent = "Flash Firmware";
+      flashBtn.disabled = true;
+      flashBtn.style.display = "none";
+      wrapper.appendChild(flashBtn);
+      this._refs.flashBtn = flashBtn;
+      const logEl = renderLog();
+      wrapper.appendChild(logEl);
+      this._refs.logContainer = logEl;
+      const footer = document.createElement("div");
+      footer.className = "footer";
+      footer.innerHTML = 'Powered by <a href="https://github.com/adam-weber/esp-webflash-toolkit" target="_blank" rel="noopener">ESP WebFlash Toolkit</a>';
+      wrapper.appendChild(footer);
+      this._bindFlasherEvents();
+      connectBtn.onclick = async () => {
+        connectBtn.disabled = true;
+        connectBtn.textContent = "Connecting...";
+        try {
+          await this._flasher.connect();
+        } catch (e) {
+          connectBtn.disabled = false;
+          connectBtn.textContent = "Connect Device";
+        }
+      };
+      flashBtn.onclick = async () => {
+        flashBtn.disabled = true;
+        try {
+          const configValues = {};
+          for (const [key, input] of this._refs.configInputs) {
+            const val = input.value.trim();
+            if (val) configValues[key] = val;
+          }
+          this._flasher.setConfig(configValues);
+          await this._flasher.flash();
+        } catch (e) {
+          flashBtn.disabled = false;
+        }
+      };
+      return wrapper;
+    }
+    _rebuildConfigForm(wrapper, fields) {
+      if (this._refs.configContainer && this._refs.configContainer.parentNode) {
+        const insertBefore = this._refs.configContainer.nextSibling;
+        this._refs.configContainer.remove();
+        const { container, inputs } = renderConfigForm(fields);
+        wrapper.insertBefore(container, insertBefore);
+        this._refs.configContainer = container;
+        this._refs.configInputs = inputs;
+        for (const [key, input] of inputs) {
+          input.addEventListener("input", () => {
+            this._flasher.setConfig({ [key]: input.value });
+          });
         }
       }
     }
-    if (config.branding) {
-      if (config.branding.primaryColor && !/^#[0-9a-fA-F]{6}$/.test(config.branding.primaryColor)) {
-        errors.push('branding.primaryColor must be a 6-digit hex color (e.g., "#0071e3")');
-      }
-      if (config.branding.theme && !["light", "dark"].includes(config.branding.theme)) {
-        errors.push('branding.theme must be "light" or "dark"');
+    _bindFlasherEvents() {
+      const f = this._flasher;
+      const r = this._refs;
+      f.addEventListener("status", (e) => {
+        const { state, message } = e.detail;
+        const stateMap = { connecting: "", connected: "connected", downloading: "flashing", generating: "flashing", flashing: "flashing", complete: "success" };
+        r.statusBox.className = `status-box ${stateMap[state] || state}`;
+        r.statusText.textContent = message;
+      });
+      f.addEventListener("state-change", (e) => {
+        r.stageLabel.textContent = e.detail.label;
+      });
+      f.addEventListener("progress", (e) => {
+        const { percent } = e.detail;
+        r.progressBar.style.display = "block";
+        r.progressFill.style.width = `${percent}%`;
+        r.statusBox.className = "status-box flashing";
+        r.statusText.textContent = "Flashing...";
+        r.statusSubtext.textContent = `${Math.round(percent)}%`;
+      });
+      f.addEventListener("log", (e) => {
+        const { message, level } = e.detail;
+        r.logContainer.style.display = "block";
+        const line = document.createElement("div");
+        line.className = `log-line ${level}`;
+        line.textContent = `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${message}`;
+        r.logContainer.appendChild(line);
+        r.logContainer.scrollTop = r.logContainer.scrollHeight;
+      });
+      f.addEventListener("connected", (e) => {
+        const { chipType } = e.detail;
+        r.statusBox.className = "status-box connected";
+        r.statusText.textContent = "Connected";
+        r.statusSubtext.textContent = chipType;
+        r.flashBtn.disabled = false;
+        r.flashBtn.style.display = "block";
+        r.connectBtn.style.display = "none";
+        this._reDispatch("esp-flasher:connected", e.detail);
+      });
+      f.addEventListener("error", (e) => {
+        r.statusBox.className = "status-box error";
+        r.statusText.textContent = "Error";
+        r.statusSubtext.textContent = e.detail.message;
+        this._reDispatch("esp-flasher:error", e.detail);
+      });
+      f.addEventListener("error-classified", (e) => {
+        const classified = e.detail;
+        r.statusBox.className = "status-box error";
+        r.statusBox.innerHTML = "";
+        r.statusBox.appendChild(renderErrorRecovery(classified));
+      });
+      f.addEventListener("complete", () => {
+        const pf = this._v2Config?.postFlash;
+        if (pf) {
+          r.statusBox.className = "status-box success";
+          r.statusBox.innerHTML = "";
+          r.statusBox.appendChild(renderPostFlash(pf));
+        } else {
+          r.statusBox.className = "status-box success";
+          r.statusText.textContent = "Flash Complete!";
+          r.statusSubtext.textContent = "You can disconnect the device";
+        }
+        this._reDispatch("esp-flasher:complete", {});
+      });
+      f.addEventListener("chip-mismatch", (e) => {
+        const { expected, detected, proceed, cancel } = e.detail;
+        if (confirm(`Chip mismatch: expected ${expected}, found ${detected}. Continue anyway?`)) {
+          proceed();
+        } else {
+          cancel();
+        }
+      });
+    }
+    _reDispatch(name, detail) {
+      this.dispatchEvent(new CustomEvent(name, {
+        detail,
+        bubbles: true,
+        composed: true
+      }));
+    }
+    _clearContent() {
+      const children = Array.from(this.shadowRoot.children);
+      for (const child of children) {
+        if (child.tagName !== "STYLE") {
+          child.remove();
+        }
       }
     }
-    return { valid: errors.length === 0, errors };
+    _renderError(message) {
+      this._clearContent();
+      const div = document.createElement("div");
+      div.className = "unsupported-block";
+      div.innerHTML = `<h2>Error</h2><p>${message}</p>`;
+      this.shadowRoot.appendChild(div);
+    }
+  };
+
+  // src/bundle-component.js
+  if (!customElements.get("esp-flasher")) {
+    customElements.define("esp-flasher", ESPFlasherElement);
   }
-  return __toCommonJS(index_exports);
+  return __toCommonJS(bundle_component_exports);
 })();
-//# sourceMappingURL=esp-webflash-toolkit.js.map
+//# sourceMappingURL=esp-flasher-component.js.map

@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "name": "My ESP32 Project",
+  "repo": "user/repo",
+  "release": "latest",
+  "branding": {
+    "logo": "https://example.com/logo.png",
+    "primaryColor": "#0071e3",
+    "theme": "light"
+  },
+  "variants": [
+    {
+      "id": "default",
+      "name": "Standard",
+      "description": "Full-featured firmware with all modules enabled",
+      "firmware": "firmware.bin",
+      "chip": "esp32s3",
+      "offset": "0x10000",
+      "nvsOffset": "0x9000",
+      "fields": ["wifi", { "key": "device_name", "label": "Device Name" }]
+    },
+    {
+      "id": "lite",
+      "name": "Lite",
+      "description": "Minimal footprint, WiFi only",
+      "firmware": "firmware-lite.bin",
+      "chip": "esp32s3"
+    }
+  ],
+  "postFlash": {
+    "title": "Flash Complete!",
+    "steps": [
+      "Disconnect the USB cable",
+      "Power cycle the device",
+      "Connect to WiFi network 'MyDevice-XXXX'"
+    ],
+    "link": {
+      "label": "Setup Guide",
+      "url": "https://example.com/setup"
+    }
+  }
+}
