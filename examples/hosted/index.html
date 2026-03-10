@@ -544,6 +544,35 @@
             padding: 10px 16px;
             margin-bottom: 0;
         }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 600px) {
+            .nav { padding: 0 16px; }
+            .nav-inner { height: 44px; }
+            .nav-brand { display: none; }
+            .nav-links { gap: 16px; width: 100%; justify-content: center; }
+            .nav-links a { font-size: 13px; }
+
+            .container { padding: 36px 16px 60px; }
+
+            .card, .setup-card { padding: 24px; }
+
+            h1 { font-size: 20px; }
+            .subtitle { font-size: 13px; margin-bottom: 24px; }
+
+            .btn { padding: 11px 14px; font-size: 13px; }
+
+            .form-group label { font-size: 12px; }
+            .form-group input, .form-group select { font-size: 13px; padding: 9px 10px; }
+
+            .field-toggles .toggle { font-size: 12px; padding: 6px 10px; }
+
+            .repo-input-group { flex-direction: column; }
+            .repo-input-group input { width: 100%; }
+            .repo-input-group .btn { width: 100%; }
+
+            .log { font-size: 11px; height: 120px; padding: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -551,8 +580,7 @@
         <div class="nav-inner">
             <a href="/" class="nav-brand">esp-webflash-toolkit</a>
             <div class="nav-links">
-                <a href="/">Docs</a>
-                <a href="/examples/component/">Component</a>
+                <a href="/examples/component/">Docs</a>
                 <a href="/examples/hosted/" class="active">Hosted Flasher</a>
                 <a href="https://github.com/adam-weber/esp-webflash-toolkit" target="_blank" rel="noopener">GitHub</a>
             </div>

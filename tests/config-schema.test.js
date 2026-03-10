@@ -4,7 +4,7 @@
  * Run with: node tests/config-schema.test.js
  */
 
-import { normalizeConfig, resolveVariantFirmwareUrl, validateConfig } from '../src/core/config-schema.js';
+import { normalizeConfig, resolveVariantFirmwareUrl, validateConfig, chipIdToName } from '../src/core/config-schema.js';
 
 let passed = 0;
 let failed = 0;
@@ -227,6 +227,22 @@ test('validateConfig: multiple variants, one missing firmware', () => {
     });
     assert(!result.valid);
     assertEquals(result.errors.length, 1);
+});
+
+// chipIdToName tests
+test('chipIdToName: maps known chip IDs', () => {
+    assertEquals(chipIdToName(0x0000), 'esp32');
+    assertEquals(chipIdToName(0x0002), 'esp32s2');
+    assertEquals(chipIdToName(0x0005), 'esp32c3');
+    assertEquals(chipIdToName(0x0009), 'esp32s3');
+    assertEquals(chipIdToName(0x000C), 'esp32c2');
+    assertEquals(chipIdToName(0x000D), 'esp32h2');
+    assertEquals(chipIdToName(0x0012), 'esp32c6');
+});
+
+test('chipIdToName: returns null for unknown ID', () => {
+    assertEquals(chipIdToName(0xFFFF), null);
+    assertEquals(chipIdToName(0x0001), null);
 });
 
 // Summary

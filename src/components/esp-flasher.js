@@ -16,13 +16,13 @@ import {
     renderBrowserWarning, renderMobileBlock, renderLog, renderModal
 } from './renderer.js';
 import { ESPFlasher } from '../core/flasher.js';
-import { normalizeConfig, resolveVariantFirmwareUrl, validateConfig } from '../core/config-schema.js';
+import { normalizeConfig, resolveVariantFirmwareUrl, validateConfig, chipIdToName } from '../core/config-schema.js';
 import { expandFieldPresets } from '../core/config-store.js';
 import { classifyError, isBrowserSupported, isMobile } from '../core/error-catalog.js';
 
 export class ESPFlasherElement extends HTMLElement {
     static get observedAttributes() {
-        return ['config', 'firmware', 'chip', 'fields', 'mode', 'theme', 'config-data'];
+        return ['config', 'firmware', 'chip', 'fields', 'mode', 'theme', 'config-data', 'preview', 'repo'];
     }
 
     constructor() {
@@ -66,6 +66,8 @@ export class ESPFlasherElement extends HTMLElement {
             } catch (e) {
                 console.error('<esp-flasher> invalid config-data JSON:', e);
             }
+        } else if (name === 'repo') {
+            this._buildFromRepo(newVal);
         } else {
             // Inline attribute changed — rebuild from attributes
             this._buildFromAttributes();
@@ -78,11 +80,12 @@ export class ESPFlasherElement extends HTMLElement {
         style.textContent = componentStyles;
         this.shadowRoot.appendChild(style);
 
-        // Check browser/mobile
+        // Check browser/mobile (skip in preview mode)
+        const isPreview = this.hasAttribute('preview');
         const browserInfo = isBrowserSupported();
         const mobile = isMobile();
 
-        if (mobile) {
+        if (mobile && !isPreview) {
             const { container, copyBtn, shareBtn } = renderMobileBlock();
             this.shadowRoot.appendChild(container);
             const pageUrl = window.location.href;
@@ -104,14 +107,15 @@ export class ESPFlasherElement extends HTMLElement {
             return;
         }
 
-        if (!browserInfo.supported) {
+        if (!browserInfo.supported && !isPreview) {
             this.shadowRoot.appendChild(renderBrowserWarning(browserInfo));
             return;
         }
 
-        // Load config from attribute
+        // Load config from attribute (priority: config > config-data > repo > inline)
         const configUrl = this.getAttribute('config');
         const configData = this.getAttribute('config-data');
+        const repo = this.getAttribute('repo');
 
         if (configUrl) {
             await this._fetchAndApplyConfig(configUrl);
@@ -121,6 +125,8 @@ export class ESPFlasherElement extends HTMLElement {
             } catch (e) {
                 console.error('<esp-flasher> invalid config-data JSON:', e);
             }
+        } else if (repo) {
+            await this._buildFromRepo(repo);
         } else {
             this._buildFromAttributes();
         }
@@ -143,6 +149,78 @@ export class ESPFlasherElement extends HTMLElement {
         } catch (e) {
             console.error('<esp-flasher> failed to load config:', e);
             this._renderError(`Failed to load config: ${e.message}`);
+        }
+    }
+
+    async _buildFromRepo(repo) {
+        // Phase 1: try flash-config.json in the repo
+        for (const branch of ['main', 'master']) {
+            try {
+                const url = `https://raw.githubusercontent.com/${repo}/${branch}/flash-config.json`;
+                let res = await fetch(url);
+                if (!res.ok) {
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                    res = await fetch(proxyUrl);
+                }
+                if (res.ok) {
+                    const json = await res.json();
+                    if (!json.repo) json.repo = repo;
+                    this._applyConfig(json);
+                    return;
+                }
+            } catch (e) { /* try next branch */ }
+        }
+
+        // Phase 2: fall back to GitHub Releases API
+        try {
+            const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+            if (!res.ok) throw new Error('No releases found');
+            const release = await res.json();
+
+            const binAssets = release.assets.filter(a => a.name.endsWith('.bin'));
+            if (binAssets.length === 0) throw new Error('No .bin files in latest release');
+
+            // Detect chip from first binary
+            let chip = 'esp32';
+            try {
+                chip = await this._detectChip(binAssets[0].browser_download_url);
+            } catch (e) { /* default to esp32 */ }
+
+            const fieldsAttr = this.getAttribute('fields');
+            const fields = fieldsAttr ? fieldsAttr.split(',').map(f => f.trim()) : [];
+
+            const config = {
+                version: 2,
+                name: release.name || repo.split('/')[1] || 'ESP Firmware',
+                repo: repo,
+                variants: binAssets.map(asset => ({
+                    id: asset.name.replace(/\.bin$/, ''),
+                    name: asset.name.replace(/\.bin$/, '').replace(/[-_]/g, ' '),
+                    firmware: asset.browser_download_url,
+                    chip: chip,
+                    fields: fields
+                }))
+            };
+
+            this._applyConfig(config);
+        } catch (e) {
+            this._renderError(`Could not load from ${repo}: ${e.message}`);
+        }
+    }
+
+    async _detectChip(url) {
+        try {
+            const res = await fetch(url, { headers: { Range: 'bytes=0-23' } });
+            if (res.status !== 206) return 'esp32';
+
+            const buf = await res.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            if (bytes[0] !== 0xE9) return 'esp32';
+
+            const chipId = bytes[12] | (bytes[13] << 8);
+            return chipIdToName(chipId) || 'esp32';
+        } catch (e) {
+            return 'esp32';
         }
     }
 
@@ -250,7 +328,17 @@ export class ESPFlasherElement extends HTMLElement {
     _openModal() {
         const content = this._buildFlashUI();
         const { overlay, closeBtn } = renderModal(content);
-        closeBtn.onclick = () => overlay.remove();
+        document.body.style.overflow = 'hidden';
+        closeBtn.onclick = () => {
+            overlay.remove();
+            document.body.style.overflow = '';
+        };
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+                document.body.style.overflow = '';
+            }
+        });
         this.shadowRoot.appendChild(overlay);
     }
 

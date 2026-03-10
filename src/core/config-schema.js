@@ -97,6 +97,25 @@ export function resolveVariantFirmwareUrl(variant, config) {
  * @param {ConfigV2} config - Normalized v2 config
  * @returns {{valid: boolean, errors: string[]}}
  */
+/**
+ * Map an ESP binary chip ID to a chip name.
+ * ESP binaries have magic 0xE9 at byte 0, chip_id as uint16 LE at byte 12.
+ * @param {number} chipId - uint16 chip ID from binary header
+ * @returns {string|null}
+ */
+export function chipIdToName(chipId) {
+    const map = {
+        0x0000: 'esp32',
+        0x0002: 'esp32s2',
+        0x0005: 'esp32c3',
+        0x0009: 'esp32s3',
+        0x000C: 'esp32c2',
+        0x000D: 'esp32h2',
+        0x0012: 'esp32c6',
+    };
+    return map[chipId] || null;
+}
+
 export function validateConfig(config) {
     const errors = [];
 

@@ -35,6 +35,18 @@ function resolveVariantFirmwareUrl(variant, config) {
   }
   return firmware;
 }
+function chipIdToName(chipId) {
+  const map = {
+    0: "esp32",
+    2: "esp32s2",
+    5: "esp32c3",
+    9: "esp32s3",
+    12: "esp32c2",
+    13: "esp32h2",
+    18: "esp32c6"
+  };
+  return map[chipId] || null;
+}
 function validateConfig(config) {
   const errors = [];
   if (!config.name) {
@@ -61,6 +73,7 @@ function validateConfig(config) {
   return { valid: errors.length === 0, errors };
 }
 export {
+  chipIdToName,
   normalizeConfig,
   resolveVariantFirmwareUrl,
   validateConfig

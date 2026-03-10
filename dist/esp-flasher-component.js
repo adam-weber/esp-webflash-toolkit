@@ -1869,11 +1869,23 @@ var ESPFlasherComponent = (() => {
     }
     return firmware;
   }
+  function chipIdToName(chipId) {
+    const map = {
+      0: "esp32",
+      2: "esp32s2",
+      5: "esp32c3",
+      9: "esp32s3",
+      12: "esp32c2",
+      13: "esp32h2",
+      18: "esp32c6"
+    };
+    return map[chipId] || null;
+  }
 
   // src/components/esp-flasher.js
   var ESPFlasherElement = class extends HTMLElement {
     static get observedAttributes() {
-      return ["config", "firmware", "chip", "fields", "mode", "theme", "config-data"];
+      return ["config", "firmware", "chip", "fields", "mode", "theme", "config-data", "preview", "repo"];
     }
     constructor() {
       super();
@@ -1911,6 +1923,8 @@ var ESPFlasherComponent = (() => {
         } catch (e) {
           console.error("<esp-flasher> invalid config-data JSON:", e);
         }
+      } else if (name === "repo") {
+        this._buildFromRepo(newVal);
       } else {
         this._buildFromAttributes();
       }
@@ -1919,9 +1933,10 @@ var ESPFlasherComponent = (() => {
       const style = document.createElement("style");
       style.textContent = componentStyles;
       this.shadowRoot.appendChild(style);
+      const isPreview = this.hasAttribute("preview");
       const browserInfo = isBrowserSupported();
       const mobile = isMobile();
-      if (mobile) {
+      if (mobile && !isPreview) {
         const { container, copyBtn, shareBtn } = renderMobileBlock();
         this.shadowRoot.appendChild(container);
         const pageUrl = window.location.href;
@@ -1946,12 +1961,13 @@ var ESPFlasherComponent = (() => {
         };
         return;
       }
-      if (!browserInfo.supported) {
+      if (!browserInfo.supported && !isPreview) {
         this.shadowRoot.appendChild(renderBrowserWarning(browserInfo));
         return;
       }
       const configUrl = this.getAttribute("config");
       const configData = this.getAttribute("config-data");
+      const repo = this.getAttribute("repo");
       if (configUrl) {
         await this._fetchAndApplyConfig(configUrl);
       } else if (configData) {
@@ -1960,6 +1976,8 @@ var ESPFlasherComponent = (() => {
         } catch (e) {
           console.error("<esp-flasher> invalid config-data JSON:", e);
         }
+      } else if (repo) {
+        await this._buildFromRepo(repo);
       } else {
         this._buildFromAttributes();
       }
@@ -1980,6 +1998,67 @@ var ESPFlasherComponent = (() => {
       } catch (e) {
         console.error("<esp-flasher> failed to load config:", e);
         this._renderError(`Failed to load config: ${e.message}`);
+      }
+    }
+    async _buildFromRepo(repo) {
+      for (const branch of ["main", "master"]) {
+        try {
+          const url = `https://raw.githubusercontent.com/${repo}/${branch}/flash-config.json`;
+          let res = await fetch(url);
+          if (!res.ok) {
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            res = await fetch(proxyUrl);
+          }
+          if (res.ok) {
+            const json = await res.json();
+            if (!json.repo) json.repo = repo;
+            this._applyConfig(json);
+            return;
+          }
+        } catch (e) {
+        }
+      }
+      try {
+        const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+        if (!res.ok) throw new Error("No releases found");
+        const release = await res.json();
+        const binAssets = release.assets.filter((a) => a.name.endsWith(".bin"));
+        if (binAssets.length === 0) throw new Error("No .bin files in latest release");
+        let chip = "esp32";
+        try {
+          chip = await this._detectChip(binAssets[0].browser_download_url);
+        } catch (e) {
+        }
+        const fieldsAttr = this.getAttribute("fields");
+        const fields = fieldsAttr ? fieldsAttr.split(",").map((f) => f.trim()) : [];
+        const config = {
+          version: 2,
+          name: release.name || repo.split("/")[1] || "ESP Firmware",
+          repo,
+          variants: binAssets.map((asset) => ({
+            id: asset.name.replace(/\.bin$/, ""),
+            name: asset.name.replace(/\.bin$/, "").replace(/[-_]/g, " "),
+            firmware: asset.browser_download_url,
+            chip,
+            fields
+          }))
+        };
+        this._applyConfig(config);
+      } catch (e) {
+        this._renderError(`Could not load from ${repo}: ${e.message}`);
+      }
+    }
+    async _detectChip(url) {
+      try {
+        const res = await fetch(url, { headers: { Range: "bytes=0-23" } });
+        if (res.status !== 206) return "esp32";
+        const buf = await res.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        if (bytes[0] !== 233) return "esp32";
+        const chipId = bytes[12] | bytes[13] << 8;
+        return chipIdToName(chipId) || "esp32";
+      } catch (e) {
+        return "esp32";
       }
     }
     _applyConfig(json) {
@@ -2068,7 +2147,17 @@ var ESPFlasherComponent = (() => {
     _openModal() {
       const content = this._buildFlashUI();
       const { overlay, closeBtn } = renderModal(content);
-      closeBtn.onclick = () => overlay.remove();
+      document.body.style.overflow = "hidden";
+      closeBtn.onclick = () => {
+        overlay.remove();
+        document.body.style.overflow = "";
+      };
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+          overlay.remove();
+          document.body.style.overflow = "";
+        }
+      });
       this.shadowRoot.appendChild(overlay);
     }
     _buildFlashUI() {

@@ -110,6 +110,7 @@
         /* ─── Content ─── */
         .page {
             max-width: 680px;
+            min-width: 0;
             padding: 64px 0 160px;
         }
 
@@ -164,6 +165,7 @@
             border-radius: 12px;
             overflow: hidden;
             transition: border-color 0.2s ease;
+            min-width: 0;
         }
         .block:hover { border-color: #d4d4d8; }
         .block + .block { margin-top: 16px; }
@@ -180,8 +182,70 @@
             font-size: 12px;
             color: #a1a1aa;
         }
-        .block-header .dots { display: flex; gap: 6px; margin-right: 12px; }
-        .block-header .dot { width: 6px; height: 6px; border-radius: 50%; background: #d4d4d8; }
+        .copy-btn {
+            margin-left: auto;
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            color: #a1a1aa;
+            cursor: pointer;
+            padding: 4px 6px;
+            display: flex;
+            align-items: center;
+            transition: all 0.15s;
+        }
+        .copy-btn:hover { color: #3f3f46; background: #f4f4f5; border-color: #e4e4e7; }
+        .copy-btn svg { width: 14px; height: 14px; }
+        .copy-btn.copied { color: #22c55e; }
+
+        /* ─── Firmware snippet widget ─── */
+        .fw-field-toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .fw-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            background: #fafafa;
+            border: 1px solid #e4e4e7;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #3f3f46;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+        .fw-toggle:hover { background: #f4f4f5; border-color: #d4d4d8; }
+        .fw-toggle input { width: 14px; height: 14px; margin: 0; accent-color: #6366f1; }
+        .fw-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 16px;
+            border: 1px solid #e4e4e7;
+            border-radius: 8px;
+            overflow: hidden;
+            width: fit-content;
+        }
+        .fw-tab {
+            padding: 6px 16px;
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            background: #fff;
+            border: none;
+            border-right: 1px solid #e4e4e7;
+            color: #71717a;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .fw-tab:last-child { border-right: none; }
+        .fw-tab:hover { background: #fafafa; color: #3f3f46; }
+        .fw-tab.active { background: #f4f4f5; color: #09090b; }
 
         .block pre { background: #18181b; margin: 0; padding: 20px 24px; overflow-x: auto; }
         .block code { font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; color: #d4d4d8; }
@@ -196,7 +260,8 @@
         .block--code-only pre { border-radius: 0; }
 
         /* ─── Tables ─── */
-        .attr-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; }
+        .table-wrap { overflow-x: auto; margin-bottom: 20px; }
+        .attr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .attr-table th {
             text-align: left; font-weight: 600; font-size: 11px;
             text-transform: uppercase; letter-spacing: 0.05em; color: #71717a;
@@ -229,7 +294,34 @@
                 gap: 0;
             }
             .sidebar { display: none; }
-            .page { padding: 64px 0 120px; }
+            .page { padding: 48px 0 100px; }
+        }
+
+        @media (max-width: 600px) {
+            .nav { padding: 0 16px; }
+            .nav-inner { height: 44px; }
+            .nav-brand { display: none; }
+            .nav-links { gap: 16px; width: 100%; justify-content: center; }
+            .nav-links a { font-size: 13px; }
+
+            .layout { padding: 0 16px; }
+            .page { padding: 36px 0 80px; }
+
+            .hero { margin-bottom: 56px; }
+            .hero .headline { font-size: 24px; }
+            .hero .desc { font-size: 14px; }
+
+            .section { margin-bottom: 48px; }
+            .section > p { font-size: 14px; }
+
+            .block pre { padding: 16px; }
+            .block code { font-size: 12px; }
+            .block .preview { padding: 24px 16px; }
+            .block-header { padding: 8px 12px; font-size: 11px; }
+
+            .attr-table { font-size: 12px; }
+            .attr-table th { font-size: 10px; padding: 6px 8px; }
+            .attr-table td { padding: 6px 8px; }
         }
     </style>
 </head>
@@ -238,8 +330,7 @@
         <div class="nav-inner">
             <a href="/" class="nav-brand">esp-webflash-toolkit</a>
             <div class="nav-links">
-                <a href="/">Docs</a>
-                <a href="/examples/component/" class="active">Component</a>
+                <a href="/examples/component/" class="active">Docs</a>
                 <a href="/examples/hosted/">Hosted Flasher</a>
                 <a href="https://github.com/adam-weber/esp-webflash-toolkit" target="_blank" rel="noopener">GitHub</a>
             </div>
@@ -250,10 +341,14 @@
         <aside class="sidebar">
             <nav class="toc">
                 <div class="toc-label">On this page</div>
+                <a href="#how-it-works" class="toc-link">How it works</a>
+                <a href="#which-to-use" class="toc-link">Which approach</a>
                 <a href="#installation" class="toc-link">Installation</a>
+                <div class="toc-divider"></div>
                 <a href="#compact-mode" class="toc-link">Compact mode</a>
                 <a href="#full-mode" class="toc-link">Full mode</a>
                 <a href="#config-url" class="toc-link">Config URL</a>
+                <a href="#fields" class="toc-link">Fields</a>
                 <div class="toc-divider"></div>
                 <a href="#attributes" class="toc-link">Attributes</a>
                 <a href="#events" class="toc-link">Events</a>
@@ -266,17 +361,38 @@
 
         <div class="page">
             <div class="hero">
-                <h1>&lt;esp-flasher&gt;</h1>
-                <p class="headline">Flash ESP32 firmware from any web page.</p>
-                <p class="desc">A drop-in web component with Shadow DOM. Add a script tag and an HTML element to any page — get a working firmware flasher with USB serial, NVS configuration, and guided error recovery. No build step required.</p>
+                <h1>esp-webflash-toolkit</h1>
+                <p class="headline">Let your users flash firmware from a browser.</p>
+                <p class="desc">No toolchain, no drivers, no app install. Your user plugs in a USB cable, opens a web page, and clicks Flash. WiFi credentials, MQTT settings, device names — all configured in the browser and written to the device in one shot.</p>
+            </div>
+
+            <!-- ─── How It Works ─── -->
+            <div class="section" id="how-it-works">
+                <h2>How it works</h2>
+                <p>The toolkit uses the <strong>Web Serial API</strong> (Chrome, Edge, Opera) to talk directly to an ESP32 over USB. When a user clicks Flash, it downloads your firmware binary, generates an NVS partition from the form fields, and writes both to the device — the same thing <code>esptool.py</code> does, but in a browser tab.</p>
+                <p>Configuration values like WiFi SSID, passwords, and device names are stored in an <strong>NVS (Non-Volatile Storage)</strong> partition. Your firmware reads them on boot using standard ESP-IDF or Arduino APIs. No custom protocol, no serial monitor, no manual setup.</p>
+                <p>The simplest possible integration — just point at your GitHub repo:</p>
+                <div class="block block--code-only">
+                    <div class="block-header">html</div>
+<pre><code><span class="p">&lt;</span><span class="t">esp-flasher</span> <span class="a">repo</span><span class="p">=</span><span class="v">"your-name/your-repo"</span> <span class="a">fields</span><span class="p">=</span><span class="v">"wifi"</span><span class="p">&gt;&lt;/</span><span class="t">esp-flasher</span><span class="p">&gt;</span></code></pre>
+                </div>
+                <p>The component checks your repo for a <a href="https://github.com/adam-weber/esp-webflash-toolkit/blob/main/examples/hosted/flash-config.v2.example.json" style="color: #6366f1; text-decoration: none; font-weight: 500;"><code>flash-config.json</code></a>. If there isn't one, it scans your latest GitHub release for <code>.bin</code> files and auto-detects the chip type from the binary header. Multiple <code>.bin</code> files become a variant dropdown automatically.</p>
+            </div>
+
+            <!-- ─── Which To Use ─── -->
+            <div class="section" id="which-to-use">
+                <h2>Which approach to use</h2>
+                <p>There are two ways to use the toolkit. Pick the one that fits your project:</p>
+                <p><strong style="color: #09090b;">&lt;esp-flasher&gt; web component</strong> — Embed a flasher on your own site. Add a script tag and an HTML element to any page: your docs, your product page, a GitHub Pages site. The component handles the entire flow inside a shadow DOM, so it won't conflict with your styles. This is what you're reading about on this page.</p>
+                <p><strong style="color: #09090b;"><a href="/examples/hosted/" style="color: #6366f1; text-decoration: none; font-weight: 500;">Hosted flasher</a></strong> — A standalone flash page you don't have to build. Paste a firmware URL and pick your options, or point it at a <a href="https://github.com/adam-weber/esp-webflash-toolkit/blob/main/examples/hosted/flash-config.v2.example.json" style="color: #6366f1; text-decoration: none; font-weight: 500;"><code>flash-config.json</code></a> in your GitHub repo. Share the link with your users. Good for quick testing, or if you don't have a website to embed on.</p>
             </div>
 
             <!-- ─── Install ─── -->
             <div class="section" id="installation">
                 <h2>Installation</h2>
-                <p>Load the component from a CDN. It self-registers the <code>&lt;esp-flasher&gt;</code> custom element — no imports or initialization needed.</p>
+                <p>Load the component from a CDN. It self-registers the <code>&lt;esp-flasher&gt;</code> custom element — no imports, no build step.</p>
                 <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>html</div>
+                    <div class="block-header">html</div>
 <pre><code><span class="p">&lt;</span><span class="t">script</span> <span class="a">src</span><span class="p">=</span><span class="v">"https://cdn.jsdelivr.net/npm/esp-webflash-toolkit@latest/dist/esp-flasher-component.min.js"</span><span class="p">&gt;&lt;/</span><span class="t">script</span><span class="p">&gt;</span></code></pre>
                 </div>
             </div>
@@ -284,10 +400,9 @@
             <!-- ─── Compact Mode ─── -->
             <div class="section" id="compact-mode">
                 <h2>Compact mode</h2>
-                <p>The default mode renders a single button. Clicking it opens the full flash UI in a modal overlay with a blurred backdrop. Ideal for embedding in existing pages where the flasher shouldn't dominate the layout.</p>
-                <p>The modal handles everything: device connection, configuration fields, progress, error recovery, and post-flash instructions. It dismisses on backdrop click or the close button.</p>
+                <p>The default. Renders a single "Flash Firmware" button. When clicked, a modal opens with the full flash UI — connect, configure, flash, done. Great for embedding in docs or product pages without taking over the layout.</p>
                 <div class="block">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>html</div>
+                    <div class="block-header">html</div>
 <pre><code><span class="p">&lt;</span><span class="t">esp-flasher</span>
   <span class="a">firmware</span><span class="p">=</span><span class="v">"https://github.com/user/repo/releases/latest/download/firmware.bin"</span>
   <span class="a">chip</span><span class="p">=</span><span class="v">"esp32s3"</span>
@@ -297,7 +412,8 @@
                         <esp-flasher
                             firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
                             chip="esp32s3"
-                            fields="wifi"></esp-flasher>
+                            fields="wifi"
+                            preview></esp-flasher>
                     </div>
                 </div>
             </div>
@@ -305,10 +421,10 @@
             <!-- ─── Full Mode ─── -->
             <div class="section" id="full-mode">
                 <h2>Full mode</h2>
-                <p>Set <code>mode="full"</code> to render the flash UI inline as a card. Use this when the flasher is the main content on the page, or when you want the UI visible without requiring a click.</p>
-                <p>The card centers itself at 400px max-width. All fields defined in the <code>fields</code> attribute are rendered as form inputs — the <code>wifi</code> preset expands to SSID and password fields, and <code>device_name</code> adds a text input.</p>
+                <p>Set <code>mode="full"</code> to show the flash UI inline as a card — no button, no modal. Use this when flashing is the whole point of the page.</p>
+                <p>Here <code>fields="wifi,device_name"</code> renders three inputs: WiFi SSID, WiFi Password, and Device Name. The user fills them in, clicks Flash, and those values get written to the device alongside the firmware.</p>
                 <div class="block">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>html</div>
+                    <div class="block-header">html</div>
 <pre><code><span class="p">&lt;</span><span class="t">esp-flasher</span>
   <span class="a">firmware</span><span class="p">=</span><span class="v">"https://github.com/user/repo/releases/latest/download/firmware.bin"</span>
   <span class="a">chip</span><span class="p">=</span><span class="v">"esp32"</span>
@@ -320,7 +436,8 @@
                             firmware="https://github.com/user/repo/releases/latest/download/firmware.bin"
                             chip="esp32"
                             fields="wifi,device_name"
-                            mode="full"></esp-flasher>
+                            mode="full"
+                            preview></esp-flasher>
                     </div>
                 </div>
             </div>
@@ -328,10 +445,9 @@
             <!-- ─── Config URL ─── -->
             <div class="section" id="config-url">
                 <h2>Config URL</h2>
-                <p>For projects with multiple firmware variants, custom branding, or post-flash setup instructions, point the component at a <code>flash-config.json</code> file. The component fetches it, normalizes the format (v1 configs are auto-upgraded), and renders a variant dropdown when multiple variants are defined.</p>
-                <p>Config files without a <code>version</code> field are treated as v1. See the <a href="/web-component.html" style="color: #6366f1; text-decoration: none; font-weight: 500;">docs</a> for the full v2 schema with branding, variants, and post-flash steps.</p>
+                <p>For projects with multiple firmware variants (e.g. "Standard" and "Lite"), custom branding, or post-flash setup steps, put a <a href="https://github.com/adam-weber/esp-webflash-toolkit/blob/main/examples/hosted/flash-config.v2.example.json" style="color: #6366f1; text-decoration: none; font-weight: 500;"><code>flash-config.json</code></a> in your repo and point the component at it. The component fetches the config and renders a variant dropdown automatically.</p>
                 <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>html</div>
+                    <div class="block-header">html</div>
 <pre><code><span class="p">&lt;</span><span class="t">esp-flasher</span>
   <span class="a">config</span><span class="p">=</span><span class="v">"https://raw.githubusercontent.com/user/repo/main/flash-config.json"</span>
   <span class="a">mode</span><span class="p">=</span><span class="v">"full"</span>
@@ -339,29 +455,46 @@
                 </div>
             </div>
 
+            <!-- ─── Fields ─── -->
+            <div class="section" id="fields">
+                <h2>Fields</h2>
+                <p>Fields define what your user configures before flashing. Set them with the <code>fields</code> attribute as a comma-separated list of presets. Each preset expands into one or more form inputs that get written to the device's NVS partition.</p>
+                <div class="table-wrap"><table class="attr-table">
+                    <thead><tr><th>Preset</th><th>Form inputs</th><th>NVS keys written</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>wifi</code></td><td>WiFi SSID, WiFi Password</td><td><code>wifi_ssid</code>, <code>wifi_pass</code></td></tr>
+                        <tr><td><code>mqtt</code></td><td>MQTT Host, MQTT User, MQTT Password</td><td><code>mqtt_host</code>, <code>mqtt_user</code>, <code>mqtt_pass</code></td></tr>
+                        <tr><td><code>device_name</code></td><td>Device Name</td><td><code>device_name</code></td></tr>
+                    </tbody>
+                </table></div>
+                <p>Combine them freely: <code>fields="wifi,mqtt,device_name"</code> renders all five inputs. If you don't need any config, omit the attribute entirely — the component will just flash the binary with no form.</p>
+                <p>You can also define custom fields through the <code>config</code> attribute or <code>config-data</code> for keys not covered by the presets.</p>
+            </div>
+
             <!-- ─── Attributes ─── -->
             <div class="section" id="attributes">
                 <h2>Attributes</h2>
-                <table class="attr-table">
+                <div class="table-wrap"><table class="attr-table">
                     <thead><tr><th>Attribute</th><th>Default</th><th>Description</th></tr></thead>
                     <tbody>
+                        <tr><td><code>repo</code></td><td class="muted">—</td><td>GitHub repo (<code>user/repo</code>). Auto-discovers firmware from config or releases.</td></tr>
                         <tr><td><code>firmware</code></td><td class="muted">—</td><td>URL to the firmware binary file</td></tr>
-                        <tr><td><code>chip</code></td><td><code>esp32</code></td><td>Expected chip type (<code>esp32</code>, <code>esp32s3</code>, <code>esp32c3</code>, etc.)</td></tr>
+                        <tr><td><code>chip</code></td><td><code>esp32</code></td><td>Expected chip type. Auto-detected when using <code>repo</code>.</td></tr>
                         <tr><td><code>fields</code></td><td class="muted">—</td><td>Comma-separated presets: <code>wifi</code>, <code>mqtt</code>, <code>device_name</code></td></tr>
                         <tr><td><code>mode</code></td><td><code>compact</code></td><td><code>compact</code> (button → modal) or <code>full</code> (inline card)</td></tr>
                         <tr><td><code>config</code></td><td class="muted">—</td><td>URL to a flash-config.json v2 file</td></tr>
                         <tr><td><code>config-data</code></td><td class="muted">—</td><td>Inline JSON config string (for programmatic use)</td></tr>
                         <tr><td><code>theme</code></td><td><code>light</code></td><td><code>light</code> or <code>dark</code></td></tr>
                     </tbody>
-                </table>
+                </table></div>
             </div>
 
             <!-- ─── Events ─── -->
             <div class="section" id="events">
                 <h2>Events</h2>
-                <p>The component dispatches Custom Events with <code>composed: true</code>, so they cross the Shadow DOM boundary. Listen directly on the element.</p>
+                <p>Listen for flash lifecycle events directly on the element. Use these to update your own UI, trigger analytics, or chain post-flash logic.</p>
                 <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>javascript</div>
+                    <div class="block-header">javascript</div>
 <pre><code><span class="k">const</span> <span class="n">el</span> <span class="p">=</span> <span class="n">document</span>.<span class="f">querySelector</span>(<span class="s">'esp-flasher'</span>)
 
 <span class="n">el</span>.<span class="f">addEventListener</span>(<span class="s">'esp-flasher:connected'</span>, (<span class="n">e</span>) <span class="p">=&gt;</span> {
@@ -377,22 +510,22 @@
   <span class="n">console</span>.<span class="f">log</span>(<span class="s">'Error:'</span>, <span class="n">e</span>.<span class="n">detail</span>.<span class="n">message</span>)
 })</code></pre>
                 </div>
-                <table class="attr-table" style="margin-top: 20px;">
+                <div class="table-wrap" style="margin-top: 20px;"><table class="attr-table">
                     <thead><tr><th>Event</th><th>Detail</th><th>Description</th></tr></thead>
                     <tbody>
                         <tr><td><code>esp-flasher:connected</code></td><td><code>{ chipType, macAddr }</code></td><td>Device connected and identified</td></tr>
                         <tr><td><code>esp-flasher:complete</code></td><td><code>{}</code></td><td>Flash finished successfully</td></tr>
                         <tr><td><code>esp-flasher:error</code></td><td><code>{ message }</code></td><td>An error occurred during the process</td></tr>
                     </tbody>
-                </table>
+                </table></div>
             </div>
 
             <!-- ─── Theming ─── -->
             <div class="section" id="theming">
                 <h2>Theming</h2>
-                <p>Override CSS custom properties on the element to match your site's design. The component inherits these through the Shadow DOM boundary.</p>
+                <p>Override CSS custom properties on the element to match your site's design. The component picks these up automatically — no JavaScript needed.</p>
                 <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>css</div>
+                    <div class="block-header">css</div>
 <pre><code><span class="t">esp-flasher</span> {
   <span class="a">--c-accent</span>: <span class="v">#6366f1</span>;
   <span class="a">--c-accent-hover</span>: <span class="v">#4f46e5</span>;
@@ -401,7 +534,7 @@
   <span class="a">--c-border</span>: <span class="v">#e4e4e7</span>;
 }</code></pre>
                 </div>
-                <table class="attr-table" style="margin-top: 20px;">
+                <div class="table-wrap" style="margin-top: 20px;"><table class="attr-table">
                     <thead><tr><th>Property</th><th>Default</th><th>Controls</th></tr></thead>
                     <tbody>
                         <tr><td><code>--c-accent</code></td><td><code>#6366f1</code></td><td>Buttons, links, focus rings, progress bar</td></tr>
@@ -412,7 +545,7 @@
                         <tr><td><code>--c-text-2</code></td><td><code>#71717a</code></td><td>Secondary text, descriptions</td></tr>
                         <tr><td><code>--c-border</code></td><td><code>#e4e4e7</code></td><td>Card borders, input borders</td></tr>
                     </tbody>
-                </table>
+                </table></div>
                 <p>When loading config via URL, the <code>branding.primaryColor</code> field automatically maps to <code>--c-accent</code>, and <code>branding.theme: "dark"</code> flips all color variables to a dark palette.</p>
             </div>
 
@@ -421,7 +554,7 @@
                 <h2>Programmatic access</h2>
                 <p>The component exposes its internal <code>ESPFlasher</code> instance on the <code>.flasher</code> property. Use it to set config values, read state, or control the flash process from JavaScript.</p>
                 <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>javascript</div>
+                    <div class="block-header">javascript</div>
 <pre><code><span class="k">const</span> <span class="n">el</span> <span class="p">=</span> <span class="n">document</span>.<span class="f">querySelector</span>(<span class="s">'esp-flasher'</span>)
 
 <span class="cm">// Set config values before or during use</span>
@@ -440,95 +573,36 @@
                 <h2>Reading config in firmware</h2>
                 <p>When you flash with <code>fields="wifi,device_name"</code>, the component writes those values to an <a href="https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html" style="color: #6366f1; text-decoration: none; font-weight: 500;" target="_blank" rel="noopener">NVS (Non-Volatile Storage)</a> partition on the device. Your firmware reads them back using standard ESP-IDF APIs — no special library needed.</p>
                 <p>All values are stored in a namespace called <code>"config"</code> at partition offset <code>0x9000</code>. The NVS keys match the field names exactly:</p>
-                <table class="attr-table">
+                <div class="table-wrap"><table class="attr-table">
                     <thead><tr><th>Field preset</th><th>NVS keys written</th><th>Type</th></tr></thead>
                     <tbody>
                         <tr><td><code>wifi</code></td><td><code>wifi_ssid</code>, <code>wifi_pass</code></td><td>string</td></tr>
                         <tr><td><code>mqtt</code></td><td><code>mqtt_host</code>, <code>mqtt_user</code>, <code>mqtt_pass</code></td><td>string</td></tr>
                         <tr><td><code>device_name</code></td><td><code>device_name</code></td><td>string</td></tr>
                     </tbody>
-                </table>
+                </table></div>
 
-                <p style="margin-top: 24px;">Here's how to read them in your firmware:</p>
+                <p style="margin-top: 24px;">Select your fields and framework to get a copy-paste snippet:</p>
 
-                <p style="font-size: 13px; font-weight: 600; color: #09090b; margin-bottom: 8px;">Arduino</p>
-                <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>cpp</div>
-<pre><code><span class="k">#include</span> <span class="s">&lt;Preferences.h&gt;</span>
-<span class="k">#include</span> <span class="s">&lt;WiFi.h&gt;</span>
-
-<span class="n">Preferences</span> <span class="n">prefs</span>;
-
-<span class="k">void</span> <span class="f">setup</span>() {
-  <span class="n">Serial</span>.<span class="f">begin</span>(<span class="v">115200</span>);
-
-  <span class="cm">// Open the "config" namespace (read-only)</span>
-  <span class="n">prefs</span>.<span class="f">begin</span>(<span class="s">"config"</span>, <span class="v">true</span>);
-
-  <span class="cm">// Read the values that were flashed</span>
-  <span class="n">String</span> <span class="n">ssid</span> <span class="p">=</span> <span class="n">prefs</span>.<span class="f">getString</span>(<span class="s">"wifi_ssid"</span>, <span class="s">""</span>);
-  <span class="n">String</span> <span class="n">pass</span> <span class="p">=</span> <span class="n">prefs</span>.<span class="f">getString</span>(<span class="s">"wifi_pass"</span>, <span class="s">""</span>);
-  <span class="n">String</span> <span class="n">name</span> <span class="p">=</span> <span class="n">prefs</span>.<span class="f">getString</span>(<span class="s">"device_name"</span>, <span class="s">"esp-device"</span>);
-
-  <span class="n">prefs</span>.<span class="f">end</span>();
-
-  <span class="cm">// Use them</span>
-  <span class="n">Serial</span>.<span class="f">printf</span>(<span class="s">"Connecting %s to %s\n"</span>, <span class="n">name</span>.<span class="f">c_str</span>(), <span class="n">ssid</span>.<span class="f">c_str</span>());
-  <span class="n">WiFi</span>.<span class="f">begin</span>(<span class="n">ssid</span>.<span class="f">c_str</span>(), <span class="n">pass</span>.<span class="f">c_str</span>());
-}</code></pre>
+                <div class="fw-field-toggles" id="fw-field-toggles">
+                    <label class="fw-toggle"><input type="checkbox" value="wifi" checked> wifi</label>
+                    <label class="fw-toggle"><input type="checkbox" value="mqtt"> mqtt</label>
+                    <label class="fw-toggle"><input type="checkbox" value="device_name" checked> device_name</label>
                 </div>
 
-                <p style="font-size: 13px; font-weight: 600; color: #09090b; margin-bottom: 8px; margin-top: 24px;">ESP-IDF (C)</p>
-                <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>c</div>
-<pre><code><span class="k">#include</span> <span class="s">"nvs_flash.h"</span>
-<span class="k">#include</span> <span class="s">"nvs.h"</span>
-
-<span class="k">void</span> <span class="f">read_config</span>() {
-    <span class="f">nvs_flash_init</span>();
-
-    <span class="n">nvs_handle_t</span> <span class="n">handle</span>;
-    <span class="f">nvs_open</span>(<span class="s">"config"</span>, <span class="n">NVS_READONLY</span>, <span class="p">&amp;</span><span class="n">handle</span>);
-
-    <span class="k">char</span> <span class="n">ssid</span>[<span class="v">33</span>], <span class="n">pass</span>[<span class="v">65</span>], <span class="n">name</span>[<span class="v">64</span>];
-    <span class="n">size_t</span> <span class="n">len</span>;
-
-    <span class="n">len</span> <span class="p">=</span> <span class="k">sizeof</span>(<span class="n">ssid</span>);
-    <span class="f">nvs_get_str</span>(<span class="n">handle</span>, <span class="s">"wifi_ssid"</span>, <span class="n">ssid</span>, <span class="p">&amp;</span><span class="n">len</span>);
-
-    <span class="n">len</span> <span class="p">=</span> <span class="k">sizeof</span>(<span class="n">pass</span>);
-    <span class="f">nvs_get_str</span>(<span class="n">handle</span>, <span class="s">"wifi_pass"</span>, <span class="n">pass</span>, <span class="p">&amp;</span><span class="n">len</span>);
-
-    <span class="n">len</span> <span class="p">=</span> <span class="k">sizeof</span>(<span class="n">name</span>);
-    <span class="f">nvs_get_str</span>(<span class="n">handle</span>, <span class="s">"device_name"</span>, <span class="n">name</span>, <span class="p">&amp;</span><span class="n">len</span>);
-
-    <span class="f">nvs_close</span>(<span class="n">handle</span>);
-
-    <span class="f">printf</span>(<span class="s">"WiFi: %s, Device: %s\n"</span>, <span class="n">ssid</span>, <span class="n">name</span>);
-}</code></pre>
+                <div class="fw-tabs" id="fw-tabs">
+                    <button class="fw-tab active" data-fw="arduino">Arduino</button>
+                    <button class="fw-tab" data-fw="espidf">ESP-IDF</button>
+                    <button class="fw-tab" data-fw="rust">Rust</button>
                 </div>
 
-                <p style="font-size: 13px; font-weight: 600; color: #09090b; margin-bottom: 8px; margin-top: 24px;">Rust (esp-idf-svc)</p>
-                <div class="block block--code-only">
-                    <div class="block-header"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>rust</div>
-<pre><code><span class="k">use</span> <span class="n">esp_idf_svc</span>::<span class="n">nvs</span>::*;
-
-<span class="k">fn</span> <span class="f">read_config</span>() <span class="p">-&gt;</span> <span class="n">Result</span><span class="p">&lt;</span>(), <span class="n">EspError</span><span class="p">&gt;</span> {
-    <span class="k">let</span> <span class="n">nvs</span> <span class="p">=</span> <span class="n">EspDefaultNvsPartition</span>::<span class="f">take</span>()?;
-    <span class="k">let</span> <span class="n">ns</span> <span class="p">=</span> <span class="n">EspNvs</span>::<span class="f">new</span>(<span class="n">nvs</span>, <span class="s">"config"</span>, <span class="v">true</span>)?;
-
-    <span class="k">let</span> <span class="k">mut</span> <span class="n">buf</span> <span class="p">=</span> [<span class="v">0u8</span>; <span class="v">128</span>];
-
-    <span class="k">let</span> <span class="n">ssid</span> <span class="p">=</span> <span class="n">ns</span>.<span class="f">get_str</span>(<span class="s">"wifi_ssid"</span>, <span class="p">&amp;</span><span class="k">mut</span> <span class="n">buf</span>)?;
-    <span class="k">let</span> <span class="n">pass</span> <span class="p">=</span> <span class="n">ns</span>.<span class="f">get_str</span>(<span class="s">"wifi_pass"</span>, <span class="p">&amp;</span><span class="k">mut</span> <span class="n">buf</span>)?;
-    <span class="k">let</span> <span class="n">name</span> <span class="p">=</span> <span class="n">ns</span>.<span class="f">get_str</span>(<span class="s">"device_name"</span>, <span class="p">&amp;</span><span class="k">mut</span> <span class="n">buf</span>)?;
-
-    <span class="n">Ok</span>(())
-}</code></pre>
+                <div class="block block--code-only" id="fw-code-block">
+                    <div class="block-header"><span id="fw-lang-label">cpp</span></div>
+                    <pre><code id="fw-code-output"></code></pre>
                 </div>
 
                 <p style="margin-top: 24px;"><strong style="color: #09090b;">Key things to know:</strong></p>
-                <table class="attr-table" style="margin-top: 8px;">
+                <div class="table-wrap" style="margin-top: 8px;"><table class="attr-table">
                     <thead><tr><th>Concept</th><th>Value</th><th>Notes</th></tr></thead>
                     <tbody>
                         <tr><td>Namespace</td><td><code>"config"</code></td><td>All fields are stored under this NVS namespace</td></tr>
@@ -537,7 +611,7 @@
                         <tr><td>Key length</td><td>15 chars max</td><td>NVS keys are case-sensitive, alphanumeric + underscore</td></tr>
                         <tr><td>Format</td><td>ESP-IDF NVS</td><td>Standard binary format — no custom parser needed</td></tr>
                     </tbody>
-                </table>
+                </table></div>
                 <p style="margin-top: 16px;">The NVS partition is written alongside the firmware in a single flash operation. Your firmware just needs to call <code>nvs_flash_init()</code> (or <code>Preferences.begin()</code> in Arduino) and read the keys — nothing else to configure.</p>
             </div>
         </div>
@@ -560,6 +634,155 @@
         }, { rootMargin: '-20% 0px -60% 0px' });
 
         sections.forEach(s => observer.observe(s));
+
+        // Copy buttons on code blocks
+        const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+        const checkIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+        document.querySelectorAll('.block-header').forEach(header => {
+            const btn = document.createElement('button');
+            btn.className = 'copy-btn';
+            btn.innerHTML = copyIcon;
+            btn.title = 'Copy code';
+            btn.onclick = () => {
+                const pre = header.closest('.block').querySelector('pre');
+                if (!pre) return;
+                navigator.clipboard.writeText(pre.textContent).then(() => {
+                    btn.innerHTML = checkIcon;
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.innerHTML = copyIcon;
+                        btn.classList.remove('copied');
+                    }, 1500);
+                });
+            };
+            header.appendChild(btn);
+        });
+
+        // ─── Dynamic firmware code snippets ───
+        const FIELDS = {
+            wifi: [
+                { key: 'wifi_ssid', var: 'ssid', label: 'WiFi SSID', cSize: 33, dflt: '""' },
+                { key: 'wifi_pass', var: 'pass', label: 'WiFi Password', cSize: 65, dflt: '""' },
+            ],
+            mqtt: [
+                { key: 'mqtt_host', var: 'host', label: 'MQTT Host', cSize: 128, dflt: '""' },
+                { key: 'mqtt_user', var: 'user', label: 'MQTT User', cSize: 64, dflt: '""' },
+                { key: 'mqtt_pass', var: 'mpass', label: 'MQTT Password', cSize: 64, dflt: '""' },
+            ],
+            device_name: [
+                { key: 'device_name', var: 'name', label: 'Device Name', cSize: 64, dflt: '"esp-device"' },
+            ]
+        };
+
+        const k = s => `<span class="k">${s}</span>`;
+        const f = s => `<span class="f">${s}</span>`;
+        const s = t => `<span class="s">${t}</span>`;
+        const v = t => `<span class="v">${t}</span>`;
+        const n = t => `<span class="n">${t}</span>`;
+        const p = t => `<span class="p">${t}</span>`;
+        const cm = t => `<span class="cm">${t}</span>`;
+
+        function getFields() {
+            const sel = Array.from(document.querySelectorAll('#fw-field-toggles input:checked')).map(c => c.value);
+            const all = [];
+            sel.forEach(preset => { if (FIELDS[preset]) all.push(...FIELDS[preset]); });
+            return all;
+        }
+
+        function genArduino(fields) {
+            if (fields.length === 0) return `${cm('// No fields selected')}`;
+            const hasWifi = fields.some(f => f.key === 'wifi_ssid');
+            let lines = [];
+            lines.push(`${k('#include')} ${s('&lt;Preferences.h&gt;')}`);
+            if (hasWifi) lines.push(`${k('#include')} ${s('&lt;WiFi.h&gt;')}`);
+            lines.push('');
+            lines.push(`${n('Preferences')} ${n('prefs')};`);
+            lines.push('');
+            lines.push(`${k('void')} ${f('setup')}() {`);
+            lines.push(`  ${n('Serial')}.${f('begin')}(${v('115200')});`);
+            lines.push(`  ${n('prefs')}.${f('begin')}(${s('"config"')}, ${v('true')});`);
+            lines.push('');
+            fields.forEach(fd => {
+                lines.push(`  ${n('String')} ${n(fd.var)} ${p('=')} ${n('prefs')}.${f('getString')}(${s('"' + fd.key + '"')}, ${s(fd.dflt)});`);
+            });
+            lines.push('');
+            lines.push(`  ${n('prefs')}.${f('end')}();`);
+            if (hasWifi) {
+                lines.push('');
+                lines.push(`  ${n('WiFi')}.${f('begin')}(${n('ssid')}.${f('c_str')}(), ${n('pass')}.${f('c_str')}());`);
+            }
+            lines.push('}');
+            return lines.join('\n');
+        }
+
+        function genEspIdf(fields) {
+            if (fields.length === 0) return `${cm('// No fields selected')}`;
+            let lines = [];
+            lines.push(`${k('#include')} ${s('"nvs_flash.h"')}`);
+            lines.push(`${k('#include')} ${s('"nvs.h"')}`);
+            lines.push('');
+            lines.push(`${k('void')} ${f('read_config')}() {`);
+            lines.push(`    ${f('nvs_flash_init')}();`);
+            lines.push('');
+            lines.push(`    ${n('nvs_handle_t')} ${n('handle')};`);
+            lines.push(`    ${f('nvs_open')}(${s('"config"')}, ${n('NVS_READONLY')}, ${p('&amp;')}${n('handle')});`);
+            lines.push('');
+            const decls = fields.map(fd => `${n(fd.var)}[${v(fd.cSize)}]`).join(', ');
+            lines.push(`    ${k('char')} ${decls};`);
+            lines.push(`    ${n('size_t')} ${n('len')};`);
+            fields.forEach(fd => {
+                lines.push('');
+                lines.push(`    ${n('len')} ${p('=')} ${k('sizeof')}(${n(fd.var)});`);
+                lines.push(`    ${f('nvs_get_str')}(${n('handle')}, ${s('"' + fd.key + '"')}, ${n(fd.var)}, ${p('&amp;')}${n('len')});`);
+            });
+            lines.push('');
+            lines.push(`    ${f('nvs_close')}(${n('handle')});`);
+            lines.push('}');
+            return lines.join('\n');
+        }
+
+        function genRust(fields) {
+            if (fields.length === 0) return `${cm('// No fields selected')}`;
+            let lines = [];
+            lines.push(`${k('use')} ${n('esp_idf_svc')}::${n('nvs')}::*;`);
+            lines.push('');
+            lines.push(`${k('fn')} ${f('read_config')}() ${p('-&gt;')} ${n('Result')}${p('&lt;')}(), ${n('EspError')}${p('&gt;')} {`);
+            lines.push(`    ${k('let')} ${n('nvs')} ${p('=')} ${n('EspDefaultNvsPartition')}::${f('take')}()?;`);
+            lines.push(`    ${k('let')} ${n('ns')} ${p('=')} ${n('EspNvs')}::${f('new')}(${n('nvs')}, ${s('"config"')}, ${v('true')})?;`);
+            lines.push('');
+            lines.push(`    ${k('let')} ${k('mut')} ${n('buf')} ${p('=')} [${v('0u8')}; ${v('128')}];`);
+            fields.forEach(fd => {
+                lines.push(`    ${k('let')} ${n(fd.var)} ${p('=')} ${n('ns')}.${f('get_str')}(${s('"' + fd.key + '"')}, ${p('&amp;')}${k('mut')} ${n('buf')})?;`);
+            });
+            lines.push('');
+            lines.push(`    ${n('Ok')}(())`);
+            lines.push('}');
+            return lines.join('\n');
+        }
+
+        let activeFw = 'arduino';
+        const fwOutput = document.getElementById('fw-code-output');
+        const fwLangLabel = document.getElementById('fw-lang-label');
+        const langMap = { arduino: 'cpp', espidf: 'c', rust: 'rust' };
+        const genMap = { arduino: genArduino, espidf: genEspIdf, rust: genRust };
+
+        function updateFwCode() {
+            const fields = getFields();
+            fwOutput.innerHTML = genMap[activeFw](fields);
+            fwLangLabel.textContent = langMap[activeFw];
+        }
+
+        document.getElementById('fw-field-toggles').addEventListener('change', updateFwCode);
+        document.getElementById('fw-tabs').addEventListener('click', (e) => {
+            if (!e.target.classList.contains('fw-tab')) return;
+            document.querySelectorAll('.fw-tab').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            activeFw = e.target.dataset.fw;
+            updateFwCode();
+        });
+
+        updateFwCode();
     </script>
 </body>
 </html>

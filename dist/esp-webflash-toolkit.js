@@ -46,6 +46,7 @@ var ESPWebFlash = (() => {
     FlashStates: () => FlashStates,
     NVSGenerator: () => NVSGenerator,
     VALID_TRANSITIONS: () => VALID_TRANSITIONS,
+    chipIdToName: () => chipIdToName,
     classifyError: () => classifyError,
     expandFieldPresets: () => expandFieldPresets,
     flashDevice: () => flashDevice,
@@ -1260,6 +1261,18 @@ var ESPWebFlash = (() => {
       return `https://github.com/${config.repo}/releases/download/${release}/${firmware}`;
     }
     return firmware;
+  }
+  function chipIdToName(chipId) {
+    const map = {
+      0: "esp32",
+      2: "esp32s2",
+      5: "esp32c3",
+      9: "esp32s3",
+      12: "esp32c2",
+      13: "esp32h2",
+      18: "esp32c6"
+    };
+    return map[chipId] || null;
   }
   function validateConfig(config) {
     const errors = [];
