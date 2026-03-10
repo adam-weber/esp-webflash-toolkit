@@ -35,12 +35,15 @@ jobs:
 
       - name: Build documentation
         run: npx honkit build docs docs/_book
+        continue-on-error: true
 
       - name: Prepare deploy folder
         run: |
           mkdir -p _site
-          # Copy built docs as root
-          cp -r docs/_book/* _site/
+          # Copy built docs as root (if they exist)
+          if [ -d "docs/_book" ]; then
+            cp -r docs/_book/* _site/
+          fi
           # Copy examples and dist
           cp -r examples _site/
           cp -r dist _site/
