@@ -235,8 +235,9 @@ export function renderMobileBlock() {
 
     const shareBtn = document.createElement('button');
     shareBtn.className = 'btn';
-    shareBtn.style.background = '#e8e8ed';
-    shareBtn.style.color = '#1d1d1f';
+    shareBtn.style.background = 'var(--c-bg)';
+    shareBtn.style.color = 'var(--c-text)';
+    shareBtn.style.border = '1px solid var(--c-border)';
     shareBtn.textContent = 'Share Link';
     container.appendChild(shareBtn);
 

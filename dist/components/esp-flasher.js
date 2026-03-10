@@ -156,20 +156,24 @@ class ESPFlasherElement extends HTMLElement {
   }
   _applyBranding(branding) {
     if (branding.primaryColor) {
-      this.style.setProperty("--esp-primary", branding.primaryColor);
+      this.style.setProperty("--c-accent", branding.primaryColor);
       const hex = branding.primaryColor.replace("#", "");
-      const r = Math.min(255, parseInt(hex.substr(0, 2), 16) + 10);
-      const g = Math.min(255, parseInt(hex.substr(2, 2), 16) + 10);
-      const b = Math.min(255, parseInt(hex.substr(4, 2), 16) + 10);
+      const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - 20);
+      const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - 20);
+      const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - 20);
       this.style.setProperty(
-        "--esp-primary-hover",
+        "--c-accent-hover",
         `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
       );
     }
     if (branding.theme === "dark") {
-      this.style.setProperty("--esp-bg", "#1d1d1f");
-      this.style.setProperty("--esp-card-bg", "#2c2c2e");
-      this.style.setProperty("--esp-text", "#f5f5f7");
+      this.style.setProperty("--c-bg", "#18181b");
+      this.style.setProperty("--c-surface", "#09090b");
+      this.style.setProperty("--c-text", "#fafafa");
+      this.style.setProperty("--c-text-2", "#a1a1aa");
+      this.style.setProperty("--c-text-3", "#71717a");
+      this.style.setProperty("--c-border", "#27272a");
+      this.style.setProperty("--c-border-light", "#1f1f23");
     }
   }
   _initFlasher(variant) {
