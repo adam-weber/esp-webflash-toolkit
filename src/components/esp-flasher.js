@@ -16,7 +16,7 @@ import {
     renderBrowserWarning, renderMobileBlock, renderLog, renderModal
 } from './renderer.js';
 import { ESPFlasher } from '../core/flasher.js';
-import { normalizeConfig, resolveVariantFirmwareUrl, validateConfig, chipIdToName } from '../core/config-schema.js';
+import { normalizeConfig, resolveVariantFirmwareUrl, chipIdToName } from '../core/config-schema.js';
 import { expandFieldPresets } from '../core/config-store.js';
 import { classifyError, isBrowserSupported, isMobile } from '../core/error-catalog.js';
 
@@ -33,6 +33,7 @@ export class ESPFlasherElement extends HTMLElement {
         this._activeVariant = null;
         this._refs = {};
         this._initialized = false;
+        this._darkMediaQuery = null;
     }
 
     /** Expose internal ESPFlasher for programmatic access */
@@ -51,13 +52,21 @@ export class ESPFlasherElement extends HTMLElement {
             this._flasher.dispose();
             this._flasher = null;
         }
+        if (this._darkMediaQuery) {
+            this._darkMediaQuery.removeEventListener('change', this._onMediaChange);
+            this._darkMediaQuery = null;
+        }
+        // Restore body scroll if modal was open
+        document.body.style.overflow = '';
     }
 
     attributeChangedCallback(name, oldVal, newVal) {
         if (!this._initialized) return;
         if (oldVal === newVal) return;
 
-        if (name === 'config') {
+        if (name === 'theme') {
+            this._applyTheme(newVal);
+        } else if (name === 'config') {
             this._fetchAndApplyConfig(newVal);
         } else if (name === 'config-data') {
             try {
@@ -79,6 +88,10 @@ export class ESPFlasherElement extends HTMLElement {
         const style = document.createElement('style');
         style.textContent = componentStyles;
         this.shadowRoot.appendChild(style);
+
+        // Apply theme from attribute before anything renders
+        const theme = this.getAttribute('theme');
+        if (theme) this._applyTheme(theme);
 
         // Check browser/mobile (skip in preview mode)
         const isPreview = this.hasAttribute('preview');
@@ -260,6 +273,50 @@ export class ESPFlasherElement extends HTMLElement {
         this._initFlasher(this._activeVariant);
     }
 
+    _applyTheme(theme) {
+        // Clean up previous auto listener
+        if (this._darkMediaQuery) {
+            this._darkMediaQuery.removeEventListener('change', this._onMediaChange);
+            this._darkMediaQuery = null;
+        }
+
+        if (theme === 'auto') {
+            this._darkMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            this._onMediaChange = (e) => {
+                if (e.matches) this._setDarkVars();
+                else this._setLightVars();
+            };
+            this._darkMediaQuery.addEventListener('change', this._onMediaChange);
+            // Apply current state
+            if (this._darkMediaQuery.matches) this._setDarkVars();
+            else this._setLightVars();
+        } else if (theme === 'dark') {
+            this._setDarkVars();
+        } else {
+            this._setLightVars();
+        }
+    }
+
+    _setDarkVars() {
+        this.style.setProperty('--c-bg', '#18181b');
+        this.style.setProperty('--c-surface', '#09090b');
+        this.style.setProperty('--c-text', '#fafafa');
+        this.style.setProperty('--c-text-2', '#a1a1aa');
+        this.style.setProperty('--c-text-3', '#71717a');
+        this.style.setProperty('--c-border', '#27272a');
+        this.style.setProperty('--c-border-light', '#1f1f23');
+    }
+
+    _setLightVars() {
+        this.style.removeProperty('--c-bg');
+        this.style.removeProperty('--c-surface');
+        this.style.removeProperty('--c-text');
+        this.style.removeProperty('--c-text-2');
+        this.style.removeProperty('--c-text-3');
+        this.style.removeProperty('--c-border');
+        this.style.removeProperty('--c-border-light');
+    }
+
     _applyBranding(branding) {
         if (branding.primaryColor) {
             this.style.setProperty('--c-accent', branding.primaryColor);
@@ -272,14 +329,9 @@ export class ESPFlasherElement extends HTMLElement {
                 `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
             );
         }
-        if (branding.theme === 'dark') {
-            this.style.setProperty('--c-bg', '#18181b');
-            this.style.setProperty('--c-surface', '#09090b');
-            this.style.setProperty('--c-text', '#fafafa');
-            this.style.setProperty('--c-text-2', '#a1a1aa');
-            this.style.setProperty('--c-text-3', '#71717a');
-            this.style.setProperty('--c-border', '#27272a');
-            this.style.setProperty('--c-border-light', '#1f1f23');
+        // branding.theme only applies if no theme attribute is set (attribute takes priority)
+        if (branding.theme && !this.hasAttribute('theme')) {
+            this._applyTheme(branding.theme);
         }
     }
 
@@ -329,15 +381,21 @@ export class ESPFlasherElement extends HTMLElement {
         const content = this._buildFlashUI();
         const { overlay, closeBtn } = renderModal(content);
         document.body.style.overflow = 'hidden';
-        closeBtn.onclick = () => {
+
+        const closeModal = () => {
             overlay.remove();
             document.body.style.overflow = '';
+            document.removeEventListener('keydown', escHandler);
         };
+
+        const escHandler = (e) => {
+            if (e.key === 'Escape') closeModal();
+        };
+        document.addEventListener('keydown', escHandler);
+
+        closeBtn.onclick = closeModal;
         overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                overlay.remove();
-                document.body.style.overflow = '';
-            }
+            if (e.target === overlay) closeModal();
         });
         this.shadowRoot.appendChild(overlay);
     }
@@ -364,7 +422,11 @@ export class ESPFlasherElement extends HTMLElement {
         const chip = this._activeVariant?.chip || 'esp32';
         const subtitle = document.createElement('div');
         subtitle.className = 'subtitle';
-        subtitle.innerHTML = `Flash firmware to your device <span class="chip-badge">${chip.toUpperCase()}</span>`;
+        subtitle.textContent = 'Flash firmware to your device ';
+        const badge = document.createElement('span');
+        badge.className = 'chip-badge';
+        badge.textContent = chip.toUpperCase();
+        subtitle.appendChild(badge);
         wrapper.appendChild(subtitle);
         this._refs.subtitle = subtitle;
 
@@ -379,7 +441,11 @@ export class ESPFlasherElement extends HTMLElement {
                 vs.description.textContent = variant.description || '';
 
                 const newChip = variant.chip || this._v2Config.variants[0].chip || 'esp32';
-                this._refs.subtitle.innerHTML = `Flash firmware to your device <span class="chip-badge">${newChip.toUpperCase()}</span>`;
+                this._refs.subtitle.textContent = 'Flash firmware to your device ';
+                const newBadge = document.createElement('span');
+                newBadge.className = 'chip-badge';
+                newBadge.textContent = newChip.toUpperCase();
+                this._refs.subtitle.appendChild(newBadge);
 
                 const resolvedUrl = resolveVariantFirmwareUrl(variant, this._v2Config);
                 this._flasher.setVariant(variant, resolvedUrl);
@@ -605,7 +671,12 @@ export class ESPFlasherElement extends HTMLElement {
         this._clearContent();
         const div = document.createElement('div');
         div.className = 'unsupported-block';
-        div.innerHTML = `<h2>Error</h2><p>${message}</p>`;
+        const h2 = document.createElement('h2');
+        h2.textContent = 'Error';
+        const p = document.createElement('p');
+        p.textContent = message;
+        div.appendChild(h2);
+        div.appendChild(p);
         this.shadowRoot.appendChild(div);
     }
 }

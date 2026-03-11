@@ -14,7 +14,7 @@ import { NVSGenerator } from './nvs-generator.js';
  * @property {string} [nvsNamespace] - NVS namespace (default: 'config')
  * @property {number} [nvsOffset] - NVS partition offset (default: 0x9000)
  * @property {number} [nvsSize] - NVS partition size (default: 0x6000)
- * @property {number} [firmwareOffset] - Firmware offset (default: 0x0)
+ * @property {number} [firmwareOffset] - Firmware offset (default: 0x10000)
  */
 
 export class FirmwareFlasher extends EventTarget {
@@ -43,7 +43,7 @@ export class FirmwareFlasher extends EventTarget {
             nvsNamespace = 'config',
             nvsOffset = 0x9000,
             nvsSize = 0x6000,
-            firmwareOffset = 0x0
+            firmwareOffset = 0x10000
         } = options;
 
         try {

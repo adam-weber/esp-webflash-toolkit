@@ -118,15 +118,16 @@ var ESPWebFlash = (() => {
             write: (data) => this.emit("log", { message: data, level: "debug" })
           }
         });
+        let timeoutId;
         const chipType = await Promise.race([
           this.espStub.main(),
-          new Promise(
-            (_, reject) => setTimeout(() => reject(new Error("Connection timeout - device not responding")), timeout)
-          ),
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error("Connection timeout - device not responding")), timeout);
+          }),
           new Promise(
             (_, reject) => signal.addEventListener("abort", () => reject(new Error("Connection cancelled")))
           )
-        ]);
+        ]).finally(() => clearTimeout(timeoutId));
         this.emit("log", { message: `Chip detected: ${chipType}`, level: "info" });
         let macAddr = null;
         if (this.espStub.chip?.macAddr) {
@@ -134,9 +135,10 @@ var ESPWebFlash = (() => {
           this.emit("log", { message: `MAC Address: ${macAddr}`, level: "info" });
         }
         if (expectedChip && chipType && !options.skipChipCheck) {
-          const expected = expectedChip.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
-          const detected = chipType.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
-          const isMatch = detected.includes(expected) || expected.includes(detected.split(" ")[0]);
+          const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const expected = normalize(expectedChip);
+          const detected = normalize(chipType.split(" ")[0]);
+          const isMatch = expected === detected;
           if (!isMatch) {
             const shouldProceed = await this.handleChipMismatch(expected, detected);
             if (!shouldProceed) {
@@ -165,13 +167,20 @@ var ESPWebFlash = (() => {
      */
     handleChipMismatch(expected, detected) {
       return new Promise((resolve) => {
+        let settled = false;
+        const settle = (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(autoCancel);
+          resolve(value);
+        };
         this.emit("chip-mismatch", {
           expected,
           detected,
-          proceed: () => resolve(true),
-          cancel: () => resolve(false)
+          proceed: () => settle(true),
+          cancel: () => settle(false)
         });
-        setTimeout(() => resolve(false), 3e4);
+        const autoCancel = setTimeout(() => settle(false), 3e4);
       });
     }
     /**
@@ -299,9 +308,6 @@ var ESPWebFlash = (() => {
           namespaceMap[namespace] = ++namespaceIndex;
         }
       }
-      const bitmapOffset = pageIndex * this.PAGE_SIZE + 32;
-      binary[bitmapOffset] = 170;
-      binary[bitmapOffset + 1] = 170;
       for (const [namespace, entries] of Object.entries(data)) {
         if (Object.keys(entries).length > 0) {
           const nsIndex = namespaceMap[namespace];
@@ -323,9 +329,6 @@ var ESPWebFlash = (() => {
               this.finalizePage(binary, pageIndex, entryIndex);
               pageIndex++;
               entryIndex = 1;
-              const newBitmapOffset = pageIndex * this.PAGE_SIZE + 32;
-              binary[newBitmapOffset] = 170;
-              binary[newBitmapOffset + 1] = 170;
               if (pageIndex >= numPages) {
                 throw new Error("NVS partition size too small for data");
               }
@@ -351,11 +354,28 @@ var ESPWebFlash = (() => {
         data.set(strBytes);
         data[strBytes.length] = 0;
       } else if (typeof value === "number") {
-        if (Number.isInteger(value)) {
-          if (value >= 0 && value <= 255) {
+        if (!Number.isInteger(value)) {
+          throw new Error("Float values not supported yet");
+        }
+        if (value < 0) {
+          if (value >= -128) {
+            type = this.TYPE_I8;
+            data = new Uint8Array(1);
+            new DataView(data.buffer).setInt8(0, value);
+          } else if (value >= -32768) {
+            type = this.TYPE_I16;
+            data = new Uint8Array(2);
+            new DataView(data.buffer).setInt16(0, value, true);
+          } else {
+            type = this.TYPE_I32;
+            data = new Uint8Array(4);
+            new DataView(data.buffer).setInt32(0, value, true);
+          }
+        } else {
+          if (value <= 255) {
             type = this.TYPE_U8;
             data = new Uint8Array([value]);
-          } else if (value >= 0 && value <= 65535) {
+          } else if (value <= 65535) {
             type = this.TYPE_U16;
             data = new Uint8Array(2);
             new DataView(data.buffer).setUint16(0, value, true);
@@ -364,8 +384,6 @@ var ESPWebFlash = (() => {
             data = new Uint8Array(4);
             new DataView(data.buffer).setUint32(0, value, true);
           }
-        } else {
-          throw new Error("Float values not supported yet");
         }
       } else {
         throw new Error(`Unsupported value type for key ${key}: ${typeof value}`);
@@ -423,7 +441,10 @@ var ESPWebFlash = (() => {
       view.setUint32(offset + 4, crc, true);
     }
     /**
-     * Finalize a page by writing the page header
+     * Finalize a page by writing the page header and entry state bitmap.
+     * The bitmap is 32 bytes (at entry slot 0, after the 32-byte page header).
+     * Each entry uses 2 bits: 0b11 = Empty, 0b10 = Written, 0b00 = Erased.
+     * Bitmap is stored LSB first.
      */
     finalizePage(binary, pageIndex, numEntries) {
       const offset = pageIndex * this.PAGE_SIZE;
@@ -431,6 +452,16 @@ var ESPWebFlash = (() => {
       view.setUint32(offset + 0, this.PAGE_STATE_ACTIVE, true);
       view.setUint32(offset + 4, pageIndex, true);
       view.setUint32(offset + 8, 4294967295, true);
+      const bitmapOffset = offset + 32;
+      for (let i = 0; i < 32; i++) {
+        binary[bitmapOffset + i] = 255;
+      }
+      for (let e = 0; e < numEntries; e++) {
+        const byteIdx = Math.floor(e / 4);
+        const bitPos = e % 4 * 2;
+        binary[bitmapOffset + byteIdx] &= ~(3 << bitPos);
+        binary[bitmapOffset + byteIdx] |= 2 << bitPos;
+      }
       const headerCRC = this.calculateCRC32(binary.slice(offset, offset + 28));
       view.setUint32(offset + 28, headerCRC, true);
     }
@@ -527,8 +558,19 @@ var ESPWebFlash = (() => {
           const actualLen = nullIndex >= 0 ? nullIndex : strLen;
           value = new TextDecoder().decode(totalBytes.slice(0, actualLen));
         } else if (type === this.TYPE_BLOB) {
-          const blobLen = view.getUint16(entryOffset + 20, true);
-          value = new Uint8Array(binary.buffer, binary.byteOffset + entryOffset + 24, Math.min(blobLen, 8));
+          const blobLen = view.getUint16(entryOffset + 24, true);
+          const blobData = new Uint8Array(blobLen);
+          let bytesRead = 0;
+          for (let s = 1; s < span; s++) {
+            const spanOffset = entryOffset + s * this.ENTRY_SIZE;
+            const chunkSize = Math.min(blobLen - bytesRead, this.ENTRY_SIZE);
+            blobData.set(
+              new Uint8Array(binary.buffer, binary.byteOffset + spanOffset, chunkSize),
+              bytesRead
+            );
+            bytesRead += chunkSize;
+          }
+          value = blobData;
         } else {
           entryIdx++;
           continue;
@@ -575,7 +617,7 @@ var ESPWebFlash = (() => {
         nvsNamespace = "config",
         nvsOffset = 36864,
         nvsSize = 24576,
-        firmwareOffset = 0
+        firmwareOffset = 65536
       } = options;
       try {
         this.emit("status", { state: "downloading", message: "Preparing firmware..." });
@@ -998,7 +1040,7 @@ var ESPWebFlash = (() => {
       if (matched) {
         const bootInstruction = BOOT_INSTRUCTIONS[chip] || BOOT_INSTRUCTIONS.esp32;
         const steps = pattern.steps.map((s) => s.replace("{bootInstruction}", bootInstruction));
-        const chipSpecific = steps.some((s) => s !== pattern.steps[pattern.steps.indexOf(s)]);
+        const chipSpecific = pattern.steps.some((s) => s.includes("{bootInstruction}"));
         return {
           type: pattern.type,
           title: pattern.title,
@@ -1238,7 +1280,7 @@ var ESPWebFlash = (() => {
   // src/core/config-schema.js
   function normalizeConfig(json) {
     if (json.version === 2) {
-      return json;
+      return { ...json, variants: json.variants.map((v) => ({ ...v })) };
     }
     return {
       version: 2,
@@ -1398,10 +1440,14 @@ var ESPWebFlash = (() => {
         error: "error"
       };
       this.elements.statusBox.className = `status-box ${stateClasses[state] || state}`;
-      this.elements.statusBox.innerHTML = `
-            <div class="status-text">${message}</div>
-            <div class="status-subtext"></div>
-        `;
+      this.elements.statusBox.textContent = "";
+      const statusText = document.createElement("div");
+      statusText.className = "status-text";
+      statusText.textContent = message;
+      const statusSub = document.createElement("div");
+      statusSub.className = "status-subtext";
+      this.elements.statusBox.appendChild(statusText);
+      this.elements.statusBox.appendChild(statusSub);
     }
     /**
      * Handle progress updates
@@ -1494,10 +1540,15 @@ var ESPWebFlash = (() => {
     handleError({ message }) {
       if (!this.elements.statusBox) return;
       this.elements.statusBox.className = "status-box error";
-      this.elements.statusBox.innerHTML = `
-            <div class="status-text">Error</div>
-            <div class="status-subtext">${message}</div>
-        `;
+      this.elements.statusBox.textContent = "";
+      const errText = document.createElement("div");
+      errText.className = "status-text";
+      errText.textContent = "Error";
+      const errSub = document.createElement("div");
+      errSub.className = "status-subtext";
+      errSub.textContent = message;
+      this.elements.statusBox.appendChild(errText);
+      this.elements.statusBox.appendChild(errSub);
     }
     /**
      * Handle classified errors with recovery steps
@@ -1505,12 +1556,20 @@ var ESPWebFlash = (() => {
      */
     handleErrorClassified(classified) {
       if (!this.elements.statusBox) return;
-      const stepsHtml = classified.steps.map((s, i) => `<li>${s}</li>`).join("");
       this.elements.statusBox.className = "status-box error";
-      this.elements.statusBox.innerHTML = `
-            <div class="status-text">${classified.title}</div>
-            <ol class="recovery-steps">${stepsHtml}</ol>
-        `;
+      this.elements.statusBox.textContent = "";
+      const titleEl = document.createElement("div");
+      titleEl.className = "status-text";
+      titleEl.textContent = classified.title;
+      this.elements.statusBox.appendChild(titleEl);
+      const ol = document.createElement("ol");
+      ol.className = "recovery-steps";
+      for (const step of classified.steps) {
+        const li = document.createElement("li");
+        li.textContent = step;
+        ol.appendChild(li);
+      }
+      this.elements.statusBox.appendChild(ol);
     }
     /**
      * Handle chip mismatch - show dialog
@@ -1544,17 +1603,31 @@ Do you want to continue anyway?`
       }
       if (this.postFlash && this.elements.statusBox) {
         const pf = this.postFlash;
-        let html = `<div class="status-text">${pf.title || "Flash Complete!"}</div>`;
+        this.elements.statusBox.className = "status-box success";
+        this.elements.statusBox.textContent = "";
+        const pfTitle = document.createElement("div");
+        pfTitle.className = "status-text";
+        pfTitle.textContent = pf.title || "Flash Complete!";
+        this.elements.statusBox.appendChild(pfTitle);
         if (pf.steps && pf.steps.length > 0) {
-          html += '<ol class="post-flash-steps">';
-          html += pf.steps.map((s) => `<li>${s}</li>`).join("");
-          html += "</ol>";
+          const ol = document.createElement("ol");
+          ol.className = "post-flash-steps";
+          for (const s of pf.steps) {
+            const li = document.createElement("li");
+            li.textContent = s;
+            ol.appendChild(li);
+          }
+          this.elements.statusBox.appendChild(ol);
         }
         if (pf.link) {
-          html += `<a href="${pf.link.url}" target="_blank" rel="noopener" class="post-flash-link">${pf.link.label}</a>`;
+          const a = document.createElement("a");
+          a.href = pf.link.url;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.className = "post-flash-link";
+          a.textContent = pf.link.label;
+          this.elements.statusBox.appendChild(a);
         }
-        this.elements.statusBox.className = "status-box success";
-        this.elements.statusBox.innerHTML = html;
       }
     }
     /**
@@ -1604,24 +1677,29 @@ Do you want to continue anyway?`
     _createFieldElement(field) {
       const group = document.createElement("div");
       group.className = "form-group";
-      const escapedPlaceholder = (field.placeholder || "").replace(/"/g, "&quot;");
-      const escapedDefault = (field.default || "").replace(/"/g, "&quot;");
-      group.innerHTML = `
-            <label for="config-${field.key}">
-                ${field.label}
-                ${field.required ? '<span class="required-marker">*</span>' : '<span class="optional-marker">(optional)</span>'}
-            </label>
-            <input
-                type="${field.type || "text"}"
-                id="config-${field.key}"
-                data-key="${field.key}"
-                placeholder="${escapedPlaceholder}"
-                value="${escapedDefault}"
-                ${field.required ? "required" : ""}
-                ${field.pattern ? `pattern="${field.pattern}"` : ""}>
-            ${field.help ? `<span class="help-text">${field.help}</span>` : ""}
-        `;
-      const input = group.querySelector("input");
+      const label = document.createElement("label");
+      label.htmlFor = `config-${field.key}`;
+      label.textContent = field.label + " ";
+      const marker = document.createElement("span");
+      marker.className = field.required ? "required-marker" : "optional-marker";
+      marker.textContent = field.required ? "*" : "(optional)";
+      label.appendChild(marker);
+      group.appendChild(label);
+      const input = document.createElement("input");
+      input.type = field.type || "text";
+      input.id = `config-${field.key}`;
+      input.dataset.key = field.key;
+      if (field.placeholder) input.placeholder = field.placeholder;
+      if (field.default) input.value = field.default;
+      if (field.required) input.required = true;
+      if (field.pattern) input.pattern = field.pattern;
+      group.appendChild(input);
+      if (field.help) {
+        const help = document.createElement("span");
+        help.className = "help-text";
+        help.textContent = field.help;
+        group.appendChild(help);
+      }
       const handler = () => {
         input.classList.remove("error");
         const errorEl = group.querySelector(".field-error");
@@ -1705,7 +1783,6 @@ Do you want to continue anyway?`
       this.initFlasher();
       this.attachEventListeners();
       this.loadProjectUI();
-      this.initializeUIElements();
       this.log("Flasher ready", "success");
       this.attemptAutoReconnect();
     }
@@ -1833,9 +1910,15 @@ Do you want to continue anyway?`
       if (nav) {
         const links = project.navbarLinks || project.headerLinks || [];
         if (links.length > 0) {
-          nav.innerHTML = links.map(
-            (link) => `<a href="${link.url}" target="_blank" class="app-header-link">${link.label}</a>`
-          ).join("");
+          nav.textContent = "";
+          for (const link of links) {
+            const a = document.createElement("a");
+            a.href = link.url;
+            a.target = "_blank";
+            a.className = "app-header-link";
+            a.textContent = link.label;
+            nav.appendChild(a);
+          }
         }
       }
     }
@@ -1843,32 +1926,64 @@ Do you want to continue anyway?`
      * Show project details in the left panel
      */
     showProjectDetails(project) {
-      const hardware = project.hardware.map((h) => `<li>${h}</li>`).join("");
-      const software = project.software.map((s) => `<li>${s}</li>`).join("");
-      const docLink = project.documentation ? `<a href="${project.documentation.url}" target="_blank" class="doc-link">
-                 <span>${project.documentation.label}</span>
-                 <span class="external-icon">\u2197</span>
-               </a>` : "";
+      const container = document.getElementById("project-details");
+      container.textContent = "";
+      const desc = document.createElement("p");
+      desc.style.marginBottom = "24px";
+      desc.textContent = project.description;
+      container.appendChild(desc);
+      if (project.documentation) {
+        const docLink = document.createElement("a");
+        docLink.href = project.documentation.url;
+        docLink.target = "_blank";
+        docLink.className = "doc-link";
+        const linkLabel = document.createElement("span");
+        linkLabel.textContent = project.documentation.label;
+        const linkIcon = document.createElement("span");
+        linkIcon.className = "external-icon";
+        linkIcon.textContent = "\u2197";
+        docLink.appendChild(linkLabel);
+        docLink.appendChild(linkIcon);
+        container.appendChild(docLink);
+      }
+      const hwSection = document.createElement("div");
+      hwSection.className = "section section-bg";
+      hwSection.style.marginTop = "32px";
+      const hwTitle = document.createElement("h3");
+      hwTitle.textContent = "Hardware";
+      hwSection.appendChild(hwTitle);
+      const hwList = document.createElement("ul");
+      hwList.className = "requirement-list";
+      for (const h of project.hardware) {
+        const li = document.createElement("li");
+        li.textContent = h;
+        hwList.appendChild(li);
+      }
+      hwSection.appendChild(hwList);
+      container.appendChild(hwSection);
       const hasConfig = project.fields?.length > 0 || project.configSections?.length > 0;
-      const configStep = hasConfig ? "Configure settings in the center panel" : "No configuration needed";
-      document.getElementById("project-details").innerHTML = `
-            <p style="margin-bottom: 24px;">${project.description}</p>
-            ${docLink}
-            <div class="section section-bg" style="margin-top: 32px;">
-                <h3>Hardware</h3>
-                <ul class="requirement-list">${hardware}</ul>
-            </div>
-            <div class="section section-bg">
-                <h3>Steps</h3>
-                <ul class="instruction-list">
-                    <li data-step="1">${configStep}</li>
-                    <li data-step="2">Connect your ESP32 device via USB</li>
-                    <li data-step="3">Click "Connect Device" and select the serial port</li>
-                    <li data-step="4">Click "Flash Firmware" to begin</li>
-                    <li data-step="5">Wait for flashing to complete (do not disconnect)</li>
-                </ul>
-            </div>
-        `;
+      const stepsData = [
+        hasConfig ? "Configure settings in the center panel" : "No configuration needed",
+        "Connect your ESP32 device via USB",
+        'Click "Connect Device" and select the serial port',
+        'Click "Flash Firmware" to begin',
+        "Wait for flashing to complete (do not disconnect)"
+      ];
+      const stepsSection = document.createElement("div");
+      stepsSection.className = "section section-bg";
+      const stepsTitle = document.createElement("h3");
+      stepsTitle.textContent = "Steps";
+      stepsSection.appendChild(stepsTitle);
+      const stepsList = document.createElement("ul");
+      stepsList.className = "instruction-list";
+      stepsData.forEach((text, i) => {
+        const li = document.createElement("li");
+        li.dataset.step = String(i + 1);
+        li.textContent = text;
+        stepsList.appendChild(li);
+      });
+      stepsSection.appendChild(stepsList);
+      container.appendChild(stepsSection);
     }
     /**
      * Render config form fields
@@ -1881,38 +1996,50 @@ Do you want to continue anyway?`
         container.innerHTML = '<div style="padding: 20px 0; text-align: center; color: #999; font-size: 13px;">No configuration needed</div>';
         return;
       }
-      container.innerHTML = "";
+      container.textContent = "";
       const sections = groupFieldsBySection(schema);
       for (const section of sections) {
         const group = document.createElement("div");
         group.className = "config-group";
-        let html = "";
         if (section.title && section.title !== "default") {
-          html += `<h3>${section.title}</h3>`;
+          const h3 = document.createElement("h3");
+          h3.textContent = section.title;
+          group.appendChild(h3);
         }
         for (const field of section.fields) {
           const savedValue = this.config[field.key] || field.default || "";
-          const escapedPlaceholder = (field.placeholder || "").replace(/"/g, "&quot;");
-          const escapedValue = String(savedValue).replace(/"/g, "&quot;");
-          html += `
-                    <div class="form-group">
-                        <label for="config-${field.key}">
-                            ${field.label}
-                            ${field.required ? '<span style="color: #ff3b30;">*</span>' : '<span style="color: #86868b; font-weight: 400;">(optional)</span>'}
-                        </label>
-                        <input
-                            type="${field.type || "text"}"
-                            id="config-${field.key}"
-                            placeholder="${escapedPlaceholder}"
-                            value="${escapedValue}"
-                            ${field.required ? "required" : ""}
-                            ${field.pattern ? `pattern="${field.pattern}"` : ""}
-                            data-key="${field.key}">
-                        ${field.help ? `<span class="help-text">${field.help}</span>` : ""}
-                    </div>
-                `;
+          const formGroup = document.createElement("div");
+          formGroup.className = "form-group";
+          const label = document.createElement("label");
+          label.htmlFor = `config-${field.key}`;
+          label.textContent = field.label + " ";
+          const marker = document.createElement("span");
+          if (field.required) {
+            marker.style.color = "#ff3b30";
+            marker.textContent = "*";
+          } else {
+            marker.style.cssText = "color: #86868b; font-weight: 400;";
+            marker.textContent = "(optional)";
+          }
+          label.appendChild(marker);
+          formGroup.appendChild(label);
+          const input = document.createElement("input");
+          input.type = field.type || "text";
+          input.id = `config-${field.key}`;
+          if (field.placeholder) input.placeholder = field.placeholder;
+          input.value = savedValue;
+          if (field.required) input.required = true;
+          if (field.pattern) input.pattern = field.pattern;
+          input.dataset.key = field.key;
+          formGroup.appendChild(input);
+          if (field.help) {
+            const help = document.createElement("span");
+            help.className = "help-text";
+            help.textContent = field.help;
+            formGroup.appendChild(help);
+          }
+          group.appendChild(formGroup);
         }
-        group.innerHTML = html;
         container.appendChild(group);
       }
       container.querySelectorAll("[data-key]").forEach((input) => {
@@ -1985,8 +2112,7 @@ Do you want to continue anyway?`
       if (!this.selectedProject) return;
       try {
         const skipChipCheck = document.getElementById("dev-skip-chip-check")?.checked || false;
-        const device = this.flasher.getDevice();
-        await this.flasher.connect();
+        await this.flasher.connect({ skipChipCheck });
         this.btnConnect.style.display = "none";
         this.btnFlash.style.display = "block";
         this.btnFlash.disabled = false;
@@ -2131,10 +2257,15 @@ Do you want to continue anyway?`
       const statusBox = document.getElementById("status-box");
       if (statusBox) {
         statusBox.className = `status-box ${state}`;
-        statusBox.innerHTML = `
-                <div class="status-text">${text}</div>
-                <div class="status-subtext">${subtext}</div>
-            `;
+        statusBox.textContent = "";
+        const textEl = document.createElement("div");
+        textEl.className = "status-text";
+        textEl.textContent = text;
+        statusBox.appendChild(textEl);
+        const subEl = document.createElement("div");
+        subEl.className = "status-subtext";
+        subEl.textContent = subtext;
+        statusBox.appendChild(subEl);
       }
     }
     clearLog() {
@@ -2213,8 +2344,6 @@ Do you want to continue anyway?`
       document.getElementById("about-panel")?.classList.remove("active");
       document.getElementById("about-backdrop")?.classList.remove("active");
       document.body.classList.remove("dev-panel-open");
-    }
-    initializeUIElements() {
     }
   };
 

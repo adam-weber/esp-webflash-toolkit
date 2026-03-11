@@ -265,9 +265,12 @@ export function renderModal(content) {
 
     const modal = document.createElement('div');
     modal.className = 'modal-content';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'modal-close';
+    closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.innerHTML = '&times;';
     modal.appendChild(closeBtn);
 

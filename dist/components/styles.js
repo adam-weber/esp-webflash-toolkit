@@ -344,6 +344,13 @@ const componentStyles = `
         cursor: pointer;
     }
 
+    .help-text {
+        display: block;
+        font-size: 11px;
+        color: var(--c-text-3);
+        margin-top: 3px;
+    }
+
     /* Variant selector */
     .variant-selector {
         margin-bottom: 12px;

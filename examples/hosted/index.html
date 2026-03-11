@@ -978,8 +978,12 @@
                 flashView.style.display = 'block';
 
                 document.getElementById('project-name').textContent = config.name;
-                document.getElementById('project-subtitle').innerHTML =
-                    `Flash firmware to your device <span class="chip-badge">${config.chip.toUpperCase()}</span>`;
+                const subtitle = document.getElementById('project-subtitle');
+                subtitle.textContent = 'Flash firmware to your device ';
+                const chipBadge = document.createElement('span');
+                chipBadge.className = 'chip-badge';
+                chipBadge.textContent = config.chip.toUpperCase();
+                subtitle.appendChild(chipBadge);
 
                 // Apply branding if v2 config
                 if (v2Config && v2Config.branding) {
@@ -1056,11 +1060,15 @@
                     const { title, steps } = e.detail;
                     const box = document.getElementById('status-box');
                     box.className = 'status-box error';
-                    const stepsHtml = steps.map(s => `<li>${s}</li>`).join('');
-                    box.innerHTML = `
-                        <div class="status-text">${title}</div>
-                        <ol class="recovery-steps">${stepsHtml}</ol>
-                    `;
+                    box.textContent = '';
+                    const titleEl = document.createElement('div');
+                    titleEl.className = 'status-text';
+                    titleEl.textContent = title;
+                    box.appendChild(titleEl);
+                    const ol = document.createElement('ol');
+                    ol.className = 'recovery-steps';
+                    steps.forEach(s => { const li = document.createElement('li'); li.textContent = s; ol.appendChild(li); });
+                    box.appendChild(ol);
                 });
 
                 flasher.addEventListener('complete', () => {
@@ -1069,16 +1077,26 @@
                     if (pf) {
                         const box = document.getElementById('status-box');
                         box.className = 'status-box success';
-                        let html = `<div class="status-text">${pf.title || 'Flash Complete!'}</div>`;
+                        box.textContent = '';
+                        const pfTitle = document.createElement('div');
+                        pfTitle.className = 'status-text';
+                        pfTitle.textContent = pf.title || 'Flash Complete!';
+                        box.appendChild(pfTitle);
                         if (pf.steps && pf.steps.length > 0) {
-                            html += '<ol class="post-flash-steps">';
-                            html += pf.steps.map(s => `<li>${s}</li>`).join('');
-                            html += '</ol>';
+                            const ol = document.createElement('ol');
+                            ol.className = 'post-flash-steps';
+                            pf.steps.forEach(s => { const li = document.createElement('li'); li.textContent = s; ol.appendChild(li); });
+                            box.appendChild(ol);
                         }
                         if (pf.link) {
-                            html += `<a href="${pf.link.url}" target="_blank" rel="noopener" class="post-flash-link">${pf.link.label}</a>`;
+                            const a = document.createElement('a');
+                            a.href = pf.link.url;
+                            a.target = '_blank';
+                            a.rel = 'noopener';
+                            a.className = 'post-flash-link';
+                            a.textContent = pf.link.label;
+                            box.appendChild(a);
                         }
-                        box.innerHTML = html;
                     } else {
                         updateStatus('success', 'Flash Complete!', 'You can disconnect the device');
                     }
@@ -1157,8 +1175,12 @@
 
                     // Update chip badge
                     const chip = variant.chip || v2Config.variants[0].chip || 'esp32';
-                    document.getElementById('project-subtitle').innerHTML =
-                        `Flash firmware to your device <span class="chip-badge">${chip.toUpperCase()}</span>`;
+                    const sub = document.getElementById('project-subtitle');
+                    sub.textContent = 'Flash firmware to your device ';
+                    const badge = document.createElement('span');
+                    badge.className = 'chip-badge';
+                    badge.textContent = chip.toUpperCase();
+                    sub.appendChild(badge);
 
                     // Update flasher
                     const resolvedUrl = resolveVariantFirmwareUrl(variant, v2Config);

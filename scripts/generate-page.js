@@ -49,7 +49,8 @@ export async function generatePage(configPath, outputDir, options = {}) {
     }
 
     // Generate HTML
-    const configJSON = JSON.stringify(config, null, 2);
+    // Escape for safe HTML embedding: </script> → <\/script>
+    const configJSON = JSON.stringify(config, null, 2).replace(/<\//g, '<\\/');
     const title = config.name || 'ESP Firmware';
 
     const html = `<!DOCTYPE html>
@@ -59,7 +60,7 @@ export async function generatePage(configPath, outputDir, options = {}) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(title)} — Flash Firmware</title>
     <style>body { margin: 0; display: flex; justify-content: center; padding: 40px 20px; background: #f5f5f7; min-height: 100vh; }</style>
-    <script>${componentJS}</script>
+    <script>${componentJS.replace(/<\//g, '<\\/')}</script>
 </head>
 <body>
     <esp-flasher mode="full"></esp-flasher>

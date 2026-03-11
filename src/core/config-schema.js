@@ -40,7 +40,7 @@
  */
 export function normalizeConfig(json) {
     if (json.version === 2) {
-        return json;
+        return { ...json, variants: json.variants.map(v => ({ ...v })) };
     }
 
     // v1 → v2: wrap as single-variant config

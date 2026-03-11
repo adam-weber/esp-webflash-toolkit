@@ -91,7 +91,13 @@ test('normalizeConfig: v2 passes through unchanged', () => {
     };
     const result = normalizeConfig(v2Input);
 
-    assertEquals(result, v2Input);
+    assertEquals(result.version, 2);
+    assertEquals(result.name, 'My Project');
+    assertEquals(result.variants.length, 1);
+    assertEquals(result.variants[0].firmware, 'a.bin');
+    // Should be a copy, not the same reference
+    assert(result !== v2Input, 'should return a new object');
+    assert(result.variants[0] !== v2Input.variants[0], 'variants should be copied');
 });
 
 test('normalizeConfig: v1 preserves branding if present', () => {

@@ -59,11 +59,7 @@ class NVSGenerator {
             }
         }
 
-        // Write bitmap entry at index 0 (ESP-IDF format)
-        // Bitmap marks which entries are in use (0xAA = first few entries used)
-        const bitmapOffset = pageIndex * this.PAGE_SIZE + 32;
-        binary[bitmapOffset] = 0xAA;  // Bitmap pattern
-        binary[bitmapOffset + 1] = 0xAA;
+        // Entry state bitmap is written during finalizePage
 
         // Process each namespace
         for (const [namespace, entries] of Object.entries(data)) {
@@ -89,11 +85,6 @@ class NVSGenerator {
                         this.finalizePage(binary, pageIndex, entryIndex);
                         pageIndex++;
                         entryIndex = 1;  // Start at 1 (entry 0 reserved for bitmap)
-
-                        // Write bitmap for new page
-                        const newBitmapOffset = pageIndex * this.PAGE_SIZE + 32;
-                        binary[newBitmapOffset] = 0xAA;
-                        binary[newBitmapOffset + 1] = 0xAA;
 
                         if (pageIndex >= numPages) {
                             throw new Error('NVS partition size too small for data');
@@ -125,21 +116,38 @@ class NVSGenerator {
             data.set(strBytes);
             data[strBytes.length] = 0; // Null terminator
         } else if (typeof value === 'number') {
-            if (Number.isInteger(value)) {
-                if (value >= 0 && value <= 255) {
+            if (!Number.isInteger(value)) {
+                throw new Error('Float values not supported yet');
+            }
+            if (value < 0) {
+                // Signed integers
+                if (value >= -128) {
+                    type = this.TYPE_I8;
+                    data = new Uint8Array(1);
+                    new DataView(data.buffer).setInt8(0, value);
+                } else if (value >= -32768) {
+                    type = this.TYPE_I16;
+                    data = new Uint8Array(2);
+                    new DataView(data.buffer).setInt16(0, value, true);
+                } else {
+                    type = this.TYPE_I32;
+                    data = new Uint8Array(4);
+                    new DataView(data.buffer).setInt32(0, value, true);
+                }
+            } else {
+                // Unsigned integers
+                if (value <= 255) {
                     type = this.TYPE_U8;
                     data = new Uint8Array([value]);
-                } else if (value >= 0 && value <= 65535) {
+                } else if (value <= 65535) {
                     type = this.TYPE_U16;
                     data = new Uint8Array(2);
-                    new DataView(data.buffer).setUint16(0, value, true); // little-endian
+                    new DataView(data.buffer).setUint16(0, value, true);
                 } else {
                     type = this.TYPE_U32;
                     data = new Uint8Array(4);
-                    new DataView(data.buffer).setUint32(0, value, true); // little-endian
+                    new DataView(data.buffer).setUint32(0, value, true);
                 }
-            } else {
-                throw new Error('Float values not supported yet');
             }
         } else {
             throw new Error(`Unsupported value type for key ${key}: ${typeof value}`);
@@ -228,7 +236,10 @@ class NVSGenerator {
     }
 
     /**
-     * Finalize a page by writing the page header
+     * Finalize a page by writing the page header and entry state bitmap.
+     * The bitmap is 32 bytes (at entry slot 0, after the 32-byte page header).
+     * Each entry uses 2 bits: 0b11 = Empty, 0b10 = Written, 0b00 = Erased.
+     * Bitmap is stored LSB first.
      */
     finalizePage(binary, pageIndex, numEntries) {
         const offset = pageIndex * this.PAGE_SIZE;
@@ -243,6 +254,24 @@ class NVSGenerator {
         view.setUint32(offset + 0, this.PAGE_STATE_ACTIVE, true);
         view.setUint32(offset + 4, pageIndex, true); // Sequence number
         view.setUint32(offset + 8, 0xFFFFFFFF, true); // Version (unused)
+
+        // Write entry state bitmap (32 bytes starting at offset+32)
+        // 2 bits per entry, 4 entries per byte. 32 bytes = 128 entries tracked.
+        // Entry 0 is the bitmap itself (always marked Written).
+        const bitmapOffset = offset + 32;
+        // Initialize all entries as Empty (0b11 per entry = 0xFF per byte)
+        for (let i = 0; i < 32; i++) {
+            binary[bitmapOffset + i] = 0xFF;
+        }
+        // Mark used entries as Written (0b10). Entry indices 0..numEntries-1.
+        // Bitmap entry 0 is the bitmap itself, entries 1..numEntries are data.
+        for (let e = 0; e < numEntries; e++) {
+            const byteIdx = Math.floor(e / 4);
+            const bitPos = (e % 4) * 2;
+            // Clear the 2-bit field (set to 0b00), then set to 0b10 (Written)
+            binary[bitmapOffset + byteIdx] &= ~(0x03 << bitPos);  // clear both bits
+            binary[bitmapOffset + byteIdx] |= (0x02 << bitPos);   // set to Written (0b10)
+        }
 
         // Calculate page CRC and store at end of header
         const headerCRC = this.calculateCRC32(binary.slice(offset, offset + 28));
@@ -391,9 +420,20 @@ NVSGenerator.prototype.parse = function(binary) {
                 const actualLen = nullIndex >= 0 ? nullIndex : strLen;
                 value = new TextDecoder().decode(totalBytes.slice(0, actualLen));
             } else if (type === this.TYPE_BLOB) {
-                // Blob: similar to string but return as Uint8Array
-                const blobLen = view.getUint16(entryOffset + 20, true);
-                value = new Uint8Array(binary.buffer, binary.byteOffset + entryOffset + 24, Math.min(blobLen, 8));
+                // Blob: length at offset+24 (2 bytes), data in continuation entries
+                const blobLen = view.getUint16(entryOffset + 24, true);
+                const blobData = new Uint8Array(blobLen);
+                let bytesRead = 0;
+                for (let s = 1; s < span; s++) {
+                    const spanOffset = entryOffset + (s * this.ENTRY_SIZE);
+                    const chunkSize = Math.min(blobLen - bytesRead, this.ENTRY_SIZE);
+                    blobData.set(
+                        new Uint8Array(binary.buffer, binary.byteOffset + spanOffset, chunkSize),
+                        bytesRead
+                    );
+                    bytesRead += chunkSize;
+                }
+                value = blobData;
             } else {
                 // Unknown type
                 entryIdx++;

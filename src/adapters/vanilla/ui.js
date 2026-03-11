@@ -145,10 +145,14 @@ export class FlasherUI {
         };
 
         this.elements.statusBox.className = `status-box ${stateClasses[state] || state}`;
-        this.elements.statusBox.innerHTML = `
-            <div class="status-text">${message}</div>
-            <div class="status-subtext"></div>
-        `;
+        this.elements.statusBox.textContent = '';
+        const statusText = document.createElement('div');
+        statusText.className = 'status-text';
+        statusText.textContent = message;
+        const statusSub = document.createElement('div');
+        statusSub.className = 'status-subtext';
+        this.elements.statusBox.appendChild(statusText);
+        this.elements.statusBox.appendChild(statusSub);
     }
 
     /**
@@ -263,10 +267,15 @@ export class FlasherUI {
         if (!this.elements.statusBox) return;
 
         this.elements.statusBox.className = 'status-box error';
-        this.elements.statusBox.innerHTML = `
-            <div class="status-text">Error</div>
-            <div class="status-subtext">${message}</div>
-        `;
+        this.elements.statusBox.textContent = '';
+        const errText = document.createElement('div');
+        errText.className = 'status-text';
+        errText.textContent = 'Error';
+        const errSub = document.createElement('div');
+        errSub.className = 'status-subtext';
+        errSub.textContent = message;
+        this.elements.statusBox.appendChild(errText);
+        this.elements.statusBox.appendChild(errSub);
     }
 
     /**
@@ -276,15 +285,20 @@ export class FlasherUI {
     handleErrorClassified(classified) {
         if (!this.elements.statusBox) return;
 
-        const stepsHtml = classified.steps
-            .map((s, i) => `<li>${s}</li>`)
-            .join('');
-
         this.elements.statusBox.className = 'status-box error';
-        this.elements.statusBox.innerHTML = `
-            <div class="status-text">${classified.title}</div>
-            <ol class="recovery-steps">${stepsHtml}</ol>
-        `;
+        this.elements.statusBox.textContent = '';
+        const titleEl = document.createElement('div');
+        titleEl.className = 'status-text';
+        titleEl.textContent = classified.title;
+        this.elements.statusBox.appendChild(titleEl);
+        const ol = document.createElement('ol');
+        ol.className = 'recovery-steps';
+        for (const step of classified.steps) {
+            const li = document.createElement('li');
+            li.textContent = step;
+            ol.appendChild(li);
+        }
+        this.elements.statusBox.appendChild(ol);
     }
 
     /**
@@ -324,17 +338,31 @@ export class FlasherUI {
         // Render postFlash screen if available
         if (this.postFlash && this.elements.statusBox) {
             const pf = this.postFlash;
-            let html = `<div class="status-text">${pf.title || 'Flash Complete!'}</div>`;
+            this.elements.statusBox.className = 'status-box success';
+            this.elements.statusBox.textContent = '';
+            const pfTitle = document.createElement('div');
+            pfTitle.className = 'status-text';
+            pfTitle.textContent = pf.title || 'Flash Complete!';
+            this.elements.statusBox.appendChild(pfTitle);
             if (pf.steps && pf.steps.length > 0) {
-                html += '<ol class="post-flash-steps">';
-                html += pf.steps.map(s => `<li>${s}</li>`).join('');
-                html += '</ol>';
+                const ol = document.createElement('ol');
+                ol.className = 'post-flash-steps';
+                for (const s of pf.steps) {
+                    const li = document.createElement('li');
+                    li.textContent = s;
+                    ol.appendChild(li);
+                }
+                this.elements.statusBox.appendChild(ol);
             }
             if (pf.link) {
-                html += `<a href="${pf.link.url}" target="_blank" rel="noopener" class="post-flash-link">${pf.link.label}</a>`;
+                const a = document.createElement('a');
+                a.href = pf.link.url;
+                a.target = '_blank';
+                a.rel = 'noopener';
+                a.className = 'post-flash-link';
+                a.textContent = pf.link.label;
+                this.elements.statusBox.appendChild(a);
             }
-            this.elements.statusBox.className = 'status-box success';
-            this.elements.statusBox.innerHTML = html;
         }
     }
 
@@ -398,29 +426,33 @@ export class FlasherUI {
         const group = document.createElement('div');
         group.className = 'form-group';
 
-        const escapedPlaceholder = (field.placeholder || '').replace(/"/g, '&quot;');
-        const escapedDefault = (field.default || '').replace(/"/g, '&quot;');
+        const label = document.createElement('label');
+        label.htmlFor = `config-${field.key}`;
+        label.textContent = field.label + ' ';
+        const marker = document.createElement('span');
+        marker.className = field.required ? 'required-marker' : 'optional-marker';
+        marker.textContent = field.required ? '*' : '(optional)';
+        label.appendChild(marker);
+        group.appendChild(label);
 
-        group.innerHTML = `
-            <label for="config-${field.key}">
-                ${field.label}
-                ${field.required
-                    ? '<span class="required-marker">*</span>'
-                    : '<span class="optional-marker">(optional)</span>'}
-            </label>
-            <input
-                type="${field.type || 'text'}"
-                id="config-${field.key}"
-                data-key="${field.key}"
-                placeholder="${escapedPlaceholder}"
-                value="${escapedDefault}"
-                ${field.required ? 'required' : ''}
-                ${field.pattern ? `pattern="${field.pattern}"` : ''}>
-            ${field.help ? `<span class="help-text">${field.help}</span>` : ''}
-        `;
+        const input = document.createElement('input');
+        input.type = field.type || 'text';
+        input.id = `config-${field.key}`;
+        input.dataset.key = field.key;
+        if (field.placeholder) input.placeholder = field.placeholder;
+        if (field.default) input.value = field.default;
+        if (field.required) input.required = true;
+        if (field.pattern) input.pattern = field.pattern;
+        group.appendChild(input);
+
+        if (field.help) {
+            const help = document.createElement('span');
+            help.className = 'help-text';
+            help.textContent = field.help;
+            group.appendChild(help);
+        }
 
         // Bind input to config store with cleanup tracking
-        const input = group.querySelector('input');
         const handler = () => {
             // Clear any error state on input
             input.classList.remove('error');

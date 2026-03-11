@@ -79,7 +79,7 @@ async function buildDirectory(srcPath, destPath) {
 
         // For ESM builds, we need to strip the window assignments from utility files
         // These are only needed for IIFE/browser bundles
-        const isUtilityFile = file === 'nvs-generator.js' || file === 'partition-table-generator.js';
+        const isUtilityFile = file === 'nvs-generator.js';
 
         try {
             if (isUtilityFile) {

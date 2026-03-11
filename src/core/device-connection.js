@@ -96,15 +96,16 @@ export class DeviceConnection extends EventTarget {
             });
 
             // Race between connection, timeout, and cancellation
+            let timeoutId;
             const chipType = await Promise.race([
                 this.espStub.main(),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Connection timeout - device not responding')), timeout)
-                ),
+                new Promise((_, reject) => {
+                    timeoutId = setTimeout(() => reject(new Error('Connection timeout - device not responding')), timeout);
+                }),
                 new Promise((_, reject) =>
                     signal.addEventListener('abort', () => reject(new Error('Connection cancelled')))
                 )
-            ]);
+            ]).finally(() => clearTimeout(timeoutId));
 
             this.emit('log', { message: `Chip detected: ${chipType}`, level: 'info' });
 
@@ -117,10 +118,11 @@ export class DeviceConnection extends EventTarget {
 
             // Chip validation
             if (expectedChip && chipType && !options.skipChipCheck) {
-                const expected = expectedChip.toUpperCase().replace('ESP32-', 'ESP32').replace('ESP32', '');
-                const detected = chipType.toUpperCase().replace('ESP32-', 'ESP32').replace('ESP32', '');
-                // Compare normalized forms: "esp32c3" and "ESP32-C3" both become "C3"
-                const isMatch = detected.includes(expected) || expected.includes(detected.split(' ')[0]);
+                // Normalize to canonical form: "esp32", "esp32s3", "esp32c3", etc.
+                const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const expected = normalize(expectedChip);
+                const detected = normalize(chipType.split(' ')[0]); // strip "(revision ...)" suffix
+                const isMatch = expected === detected;
 
                 if (!isMatch) {
                     // Emit chip mismatch event and wait for resolution
@@ -157,15 +159,23 @@ export class DeviceConnection extends EventTarget {
      */
     handleChipMismatch(expected, detected) {
         return new Promise((resolve) => {
+            let settled = false;
+            const settle = (value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(autoCancel);
+                resolve(value);
+            };
+
             this.emit('chip-mismatch', {
                 expected,
                 detected,
-                proceed: () => resolve(true),
-                cancel: () => resolve(false)
+                proceed: () => settle(true),
+                cancel: () => settle(false)
             });
 
             // Default: auto-cancel after 30 seconds if no response
-            setTimeout(() => resolve(false), 30000);
+            const autoCancel = setTimeout(() => settle(false), 30000);
         });
     }
 

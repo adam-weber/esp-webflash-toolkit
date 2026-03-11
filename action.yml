@@ -40,17 +40,20 @@ runs:
 
     - name: Install esp-webflash-toolkit
       shell: bash
-      run: npm install esp-webflash-toolkit@${{ inputs.component-version }}
+      env:
+        COMPONENT_VERSION: ${{ inputs.component-version }}
+      run: npm install "esp-webflash-toolkit@${COMPONENT_VERSION}"
 
     - name: Generate flash page
       id: generate
       shell: bash
+      env:
+        CONFIG_PATH: ${{ inputs.config }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        REPO_URL: ${{ github.event.repository.html_url }}
       run: |
-        npx esp-webflash-toolkit generate "${{ inputs.config }}" --output "${{ inputs.output-dir }}"
-        echo "badge_markdown=$(cat <<'BADGE'
-        [![Flash Firmware](https://img.shields.io/badge/Flash-Firmware-blue)](${{ github.event.repository.html_url }})
-        BADGE
-        )" >> "$GITHUB_OUTPUT"
+        npx esp-webflash-toolkit generate "${CONFIG_PATH}" --output "${OUTPUT_DIR}"
+        echo "badge_markdown=[![Flash Firmware](https://img.shields.io/badge/Flash-Firmware-blue)](${REPO_URL})" >> "$GITHUB_OUTPUT"
 
     - name: Upload Pages artifact
       if: inputs.deploy == 'true'

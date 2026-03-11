@@ -1,4 +1,4 @@
-import { ESPFlasher, NVSGenerator, expandFieldPresets } from "../../core/index.js";
+import { ESPFlasher } from "../../core/index.js";
 import { groupFieldsBySection } from "../../core/config-store.js";
 import { FlasherUI } from "./ui.js";
 class FlasherApp {
@@ -34,7 +34,6 @@ class FlasherApp {
     this.initFlasher();
     this.attachEventListeners();
     this.loadProjectUI();
-    this.initializeUIElements();
     this.log("Flasher ready", "success");
     this.attemptAutoReconnect();
   }
@@ -162,9 +161,15 @@ class FlasherApp {
     if (nav) {
       const links = project.navbarLinks || project.headerLinks || [];
       if (links.length > 0) {
-        nav.innerHTML = links.map(
-          (link) => `<a href="${link.url}" target="_blank" class="app-header-link">${link.label}</a>`
-        ).join("");
+        nav.textContent = "";
+        for (const link of links) {
+          const a = document.createElement("a");
+          a.href = link.url;
+          a.target = "_blank";
+          a.className = "app-header-link";
+          a.textContent = link.label;
+          nav.appendChild(a);
+        }
       }
     }
   }
@@ -172,32 +177,64 @@ class FlasherApp {
    * Show project details in the left panel
    */
   showProjectDetails(project) {
-    const hardware = project.hardware.map((h) => `<li>${h}</li>`).join("");
-    const software = project.software.map((s) => `<li>${s}</li>`).join("");
-    const docLink = project.documentation ? `<a href="${project.documentation.url}" target="_blank" class="doc-link">
-                 <span>${project.documentation.label}</span>
-                 <span class="external-icon">\u2197</span>
-               </a>` : "";
+    const container = document.getElementById("project-details");
+    container.textContent = "";
+    const desc = document.createElement("p");
+    desc.style.marginBottom = "24px";
+    desc.textContent = project.description;
+    container.appendChild(desc);
+    if (project.documentation) {
+      const docLink = document.createElement("a");
+      docLink.href = project.documentation.url;
+      docLink.target = "_blank";
+      docLink.className = "doc-link";
+      const linkLabel = document.createElement("span");
+      linkLabel.textContent = project.documentation.label;
+      const linkIcon = document.createElement("span");
+      linkIcon.className = "external-icon";
+      linkIcon.textContent = "\u2197";
+      docLink.appendChild(linkLabel);
+      docLink.appendChild(linkIcon);
+      container.appendChild(docLink);
+    }
+    const hwSection = document.createElement("div");
+    hwSection.className = "section section-bg";
+    hwSection.style.marginTop = "32px";
+    const hwTitle = document.createElement("h3");
+    hwTitle.textContent = "Hardware";
+    hwSection.appendChild(hwTitle);
+    const hwList = document.createElement("ul");
+    hwList.className = "requirement-list";
+    for (const h of project.hardware) {
+      const li = document.createElement("li");
+      li.textContent = h;
+      hwList.appendChild(li);
+    }
+    hwSection.appendChild(hwList);
+    container.appendChild(hwSection);
     const hasConfig = project.fields?.length > 0 || project.configSections?.length > 0;
-    const configStep = hasConfig ? "Configure settings in the center panel" : "No configuration needed";
-    document.getElementById("project-details").innerHTML = `
-            <p style="margin-bottom: 24px;">${project.description}</p>
-            ${docLink}
-            <div class="section section-bg" style="margin-top: 32px;">
-                <h3>Hardware</h3>
-                <ul class="requirement-list">${hardware}</ul>
-            </div>
-            <div class="section section-bg">
-                <h3>Steps</h3>
-                <ul class="instruction-list">
-                    <li data-step="1">${configStep}</li>
-                    <li data-step="2">Connect your ESP32 device via USB</li>
-                    <li data-step="3">Click "Connect Device" and select the serial port</li>
-                    <li data-step="4">Click "Flash Firmware" to begin</li>
-                    <li data-step="5">Wait for flashing to complete (do not disconnect)</li>
-                </ul>
-            </div>
-        `;
+    const stepsData = [
+      hasConfig ? "Configure settings in the center panel" : "No configuration needed",
+      "Connect your ESP32 device via USB",
+      'Click "Connect Device" and select the serial port',
+      'Click "Flash Firmware" to begin',
+      "Wait for flashing to complete (do not disconnect)"
+    ];
+    const stepsSection = document.createElement("div");
+    stepsSection.className = "section section-bg";
+    const stepsTitle = document.createElement("h3");
+    stepsTitle.textContent = "Steps";
+    stepsSection.appendChild(stepsTitle);
+    const stepsList = document.createElement("ul");
+    stepsList.className = "instruction-list";
+    stepsData.forEach((text, i) => {
+      const li = document.createElement("li");
+      li.dataset.step = String(i + 1);
+      li.textContent = text;
+      stepsList.appendChild(li);
+    });
+    stepsSection.appendChild(stepsList);
+    container.appendChild(stepsSection);
   }
   /**
    * Render config form fields
@@ -210,38 +247,50 @@ class FlasherApp {
       container.innerHTML = '<div style="padding: 20px 0; text-align: center; color: #999; font-size: 13px;">No configuration needed</div>';
       return;
     }
-    container.innerHTML = "";
+    container.textContent = "";
     const sections = groupFieldsBySection(schema);
     for (const section of sections) {
       const group = document.createElement("div");
       group.className = "config-group";
-      let html = "";
       if (section.title && section.title !== "default") {
-        html += `<h3>${section.title}</h3>`;
+        const h3 = document.createElement("h3");
+        h3.textContent = section.title;
+        group.appendChild(h3);
       }
       for (const field of section.fields) {
         const savedValue = this.config[field.key] || field.default || "";
-        const escapedPlaceholder = (field.placeholder || "").replace(/"/g, "&quot;");
-        const escapedValue = String(savedValue).replace(/"/g, "&quot;");
-        html += `
-                    <div class="form-group">
-                        <label for="config-${field.key}">
-                            ${field.label}
-                            ${field.required ? '<span style="color: #ff3b30;">*</span>' : '<span style="color: #86868b; font-weight: 400;">(optional)</span>'}
-                        </label>
-                        <input
-                            type="${field.type || "text"}"
-                            id="config-${field.key}"
-                            placeholder="${escapedPlaceholder}"
-                            value="${escapedValue}"
-                            ${field.required ? "required" : ""}
-                            ${field.pattern ? `pattern="${field.pattern}"` : ""}
-                            data-key="${field.key}">
-                        ${field.help ? `<span class="help-text">${field.help}</span>` : ""}
-                    </div>
-                `;
+        const formGroup = document.createElement("div");
+        formGroup.className = "form-group";
+        const label = document.createElement("label");
+        label.htmlFor = `config-${field.key}`;
+        label.textContent = field.label + " ";
+        const marker = document.createElement("span");
+        if (field.required) {
+          marker.style.color = "#ff3b30";
+          marker.textContent = "*";
+        } else {
+          marker.style.cssText = "color: #86868b; font-weight: 400;";
+          marker.textContent = "(optional)";
+        }
+        label.appendChild(marker);
+        formGroup.appendChild(label);
+        const input = document.createElement("input");
+        input.type = field.type || "text";
+        input.id = `config-${field.key}`;
+        if (field.placeholder) input.placeholder = field.placeholder;
+        input.value = savedValue;
+        if (field.required) input.required = true;
+        if (field.pattern) input.pattern = field.pattern;
+        input.dataset.key = field.key;
+        formGroup.appendChild(input);
+        if (field.help) {
+          const help = document.createElement("span");
+          help.className = "help-text";
+          help.textContent = field.help;
+          formGroup.appendChild(help);
+        }
+        group.appendChild(formGroup);
       }
-      group.innerHTML = html;
       container.appendChild(group);
     }
     container.querySelectorAll("[data-key]").forEach((input) => {
@@ -314,8 +363,7 @@ class FlasherApp {
     if (!this.selectedProject) return;
     try {
       const skipChipCheck = document.getElementById("dev-skip-chip-check")?.checked || false;
-      const device = this.flasher.getDevice();
-      await this.flasher.connect();
+      await this.flasher.connect({ skipChipCheck });
       this.btnConnect.style.display = "none";
       this.btnFlash.style.display = "block";
       this.btnFlash.disabled = false;
@@ -460,10 +508,15 @@ class FlasherApp {
     const statusBox = document.getElementById("status-box");
     if (statusBox) {
       statusBox.className = `status-box ${state}`;
-      statusBox.innerHTML = `
-                <div class="status-text">${text}</div>
-                <div class="status-subtext">${subtext}</div>
-            `;
+      statusBox.textContent = "";
+      const textEl = document.createElement("div");
+      textEl.className = "status-text";
+      textEl.textContent = text;
+      statusBox.appendChild(textEl);
+      const subEl = document.createElement("div");
+      subEl.className = "status-subtext";
+      subEl.textContent = subtext;
+      statusBox.appendChild(subEl);
     }
   }
   clearLog() {
@@ -543,12 +596,8 @@ class FlasherApp {
     document.getElementById("about-backdrop")?.classList.remove("active");
     document.body.classList.remove("dev-panel-open");
   }
-  initializeUIElements() {
-  }
 }
-import { FlasherUI as FlasherUI2 } from "./ui.js";
 export {
-  FlasherApp,
-  FlasherUI2 as FlasherUI
+  FlasherApp
 };
 //# sourceMappingURL=app.js.map

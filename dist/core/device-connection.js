@@ -57,15 +57,16 @@ class DeviceConnection extends EventTarget {
           write: (data) => this.emit("log", { message: data, level: "debug" })
         }
       });
+      let timeoutId;
       const chipType = await Promise.race([
         this.espStub.main(),
-        new Promise(
-          (_, reject) => setTimeout(() => reject(new Error("Connection timeout - device not responding")), timeout)
-        ),
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("Connection timeout - device not responding")), timeout);
+        }),
         new Promise(
           (_, reject) => signal.addEventListener("abort", () => reject(new Error("Connection cancelled")))
         )
-      ]);
+      ]).finally(() => clearTimeout(timeoutId));
       this.emit("log", { message: `Chip detected: ${chipType}`, level: "info" });
       let macAddr = null;
       if (this.espStub.chip?.macAddr) {
@@ -73,9 +74,10 @@ class DeviceConnection extends EventTarget {
         this.emit("log", { message: `MAC Address: ${macAddr}`, level: "info" });
       }
       if (expectedChip && chipType && !options.skipChipCheck) {
-        const expected = expectedChip.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
-        const detected = chipType.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
-        const isMatch = detected.includes(expected) || expected.includes(detected.split(" ")[0]);
+        const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const expected = normalize(expectedChip);
+        const detected = normalize(chipType.split(" ")[0]);
+        const isMatch = expected === detected;
         if (!isMatch) {
           const shouldProceed = await this.handleChipMismatch(expected, detected);
           if (!shouldProceed) {
@@ -104,13 +106,20 @@ class DeviceConnection extends EventTarget {
    */
   handleChipMismatch(expected, detected) {
     return new Promise((resolve) => {
+      let settled = false;
+      const settle = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(autoCancel);
+        resolve(value);
+      };
       this.emit("chip-mismatch", {
         expected,
         detected,
-        proceed: () => resolve(true),
-        cancel: () => resolve(false)
+        proceed: () => settle(true),
+        cancel: () => settle(false)
       });
-      setTimeout(() => resolve(false), 3e4);
+      const autoCancel = setTimeout(() => settle(false), 3e4);
     });
   }
   /**

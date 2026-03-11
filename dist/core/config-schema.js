@@ -1,6 +1,6 @@
 function normalizeConfig(json) {
   if (json.version === 2) {
-    return json;
+    return { ...json, variants: json.variants.map((v) => ({ ...v })) };
   }
   return {
     version: 2,

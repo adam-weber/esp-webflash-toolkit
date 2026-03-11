@@ -264,8 +264,3 @@ export async function flashDevice(options) {
     }
 }
 
-// Re-exports for convenience
-export { DeviceConnection } from './device-connection.js';
-export { FirmwareFlasher } from './firmware-flasher.js';
-export { NVSGenerator } from './nvs-generator.js';
-export { ConfigStore, FieldPresets, expandFieldPresets } from './config-store.js';

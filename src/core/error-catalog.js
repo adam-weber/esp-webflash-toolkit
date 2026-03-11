@@ -113,7 +113,7 @@ export function classifyError(error, context = {}) {
         if (matched) {
             const bootInstruction = BOOT_INSTRUCTIONS[chip] || BOOT_INSTRUCTIONS.esp32;
             const steps = pattern.steps.map(s => s.replace('{bootInstruction}', bootInstruction));
-            const chipSpecific = steps.some(s => s !== pattern.steps[pattern.steps.indexOf(s)]);
+            const chipSpecific = pattern.steps.some(s => s.includes('{bootInstruction}'));
 
             return {
                 type: pattern.type,

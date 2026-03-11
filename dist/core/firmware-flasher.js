@@ -23,7 +23,7 @@ class FirmwareFlasher extends EventTarget {
       nvsNamespace = "config",
       nvsOffset = 36864,
       nvsSize = 24576,
-      firmwareOffset = 0
+      firmwareOffset = 65536
     } = options;
     try {
       this.emit("status", { state: "downloading", message: "Preparing firmware..." });

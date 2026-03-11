@@ -117,15 +117,16 @@ var ESPWebFlash = (() => {
             write: (data) => this.emit("log", { message: data, level: "debug" })
           }
         });
+        let timeoutId;
         const chipType = await Promise.race([
           this.espStub.main(),
-          new Promise(
-            (_, reject) => setTimeout(() => reject(new Error("Connection timeout - device not responding")), timeout)
-          ),
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error("Connection timeout - device not responding")), timeout);
+          }),
           new Promise(
             (_, reject) => signal.addEventListener("abort", () => reject(new Error("Connection cancelled")))
           )
-        ]);
+        ]).finally(() => clearTimeout(timeoutId));
         this.emit("log", { message: `Chip detected: ${chipType}`, level: "info" });
         let macAddr = null;
         if (this.espStub.chip?.macAddr) {
@@ -133,9 +134,10 @@ var ESPWebFlash = (() => {
           this.emit("log", { message: `MAC Address: ${macAddr}`, level: "info" });
         }
         if (expectedChip && chipType && !options.skipChipCheck) {
-          const expected = expectedChip.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
-          const detected = chipType.toUpperCase().replace("ESP32-", "ESP32").replace("ESP32", "");
-          const isMatch = detected.includes(expected) || expected.includes(detected.split(" ")[0]);
+          const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const expected = normalize(expectedChip);
+          const detected = normalize(chipType.split(" ")[0]);
+          const isMatch = expected === detected;
           if (!isMatch) {
             const shouldProceed = await this.handleChipMismatch(expected, detected);
             if (!shouldProceed) {
@@ -164,13 +166,20 @@ var ESPWebFlash = (() => {
      */
     handleChipMismatch(expected, detected) {
       return new Promise((resolve) => {
+        let settled = false;
+        const settle = (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(autoCancel);
+          resolve(value);
+        };
         this.emit("chip-mismatch", {
           expected,
           detected,
-          proceed: () => resolve(true),
-          cancel: () => resolve(false)
+          proceed: () => settle(true),
+          cancel: () => settle(false)
         });
-        setTimeout(() => resolve(false), 3e4);
+        const autoCancel = setTimeout(() => settle(false), 3e4);
       });
     }
     /**
@@ -298,9 +307,6 @@ var ESPWebFlash = (() => {
           namespaceMap[namespace] = ++namespaceIndex;
         }
       }
-      const bitmapOffset = pageIndex * this.PAGE_SIZE + 32;
-      binary[bitmapOffset] = 170;
-      binary[bitmapOffset + 1] = 170;
       for (const [namespace, entries] of Object.entries(data)) {
         if (Object.keys(entries).length > 0) {
           const nsIndex = namespaceMap[namespace];
@@ -322,9 +328,6 @@ var ESPWebFlash = (() => {
               this.finalizePage(binary, pageIndex, entryIndex);
               pageIndex++;
               entryIndex = 1;
-              const newBitmapOffset = pageIndex * this.PAGE_SIZE + 32;
-              binary[newBitmapOffset] = 170;
-              binary[newBitmapOffset + 1] = 170;
               if (pageIndex >= numPages) {
                 throw new Error("NVS partition size too small for data");
               }
@@ -350,11 +353,28 @@ var ESPWebFlash = (() => {
         data.set(strBytes);
         data[strBytes.length] = 0;
       } else if (typeof value === "number") {
-        if (Number.isInteger(value)) {
-          if (value >= 0 && value <= 255) {
+        if (!Number.isInteger(value)) {
+          throw new Error("Float values not supported yet");
+        }
+        if (value < 0) {
+          if (value >= -128) {
+            type = this.TYPE_I8;
+            data = new Uint8Array(1);
+            new DataView(data.buffer).setInt8(0, value);
+          } else if (value >= -32768) {
+            type = this.TYPE_I16;
+            data = new Uint8Array(2);
+            new DataView(data.buffer).setInt16(0, value, true);
+          } else {
+            type = this.TYPE_I32;
+            data = new Uint8Array(4);
+            new DataView(data.buffer).setInt32(0, value, true);
+          }
+        } else {
+          if (value <= 255) {
             type = this.TYPE_U8;
             data = new Uint8Array([value]);
-          } else if (value >= 0 && value <= 65535) {
+          } else if (value <= 65535) {
             type = this.TYPE_U16;
             data = new Uint8Array(2);
             new DataView(data.buffer).setUint16(0, value, true);
@@ -363,8 +383,6 @@ var ESPWebFlash = (() => {
             data = new Uint8Array(4);
             new DataView(data.buffer).setUint32(0, value, true);
           }
-        } else {
-          throw new Error("Float values not supported yet");
         }
       } else {
         throw new Error(`Unsupported value type for key ${key}: ${typeof value}`);
@@ -422,7 +440,10 @@ var ESPWebFlash = (() => {
       view.setUint32(offset + 4, crc, true);
     }
     /**
-     * Finalize a page by writing the page header
+     * Finalize a page by writing the page header and entry state bitmap.
+     * The bitmap is 32 bytes (at entry slot 0, after the 32-byte page header).
+     * Each entry uses 2 bits: 0b11 = Empty, 0b10 = Written, 0b00 = Erased.
+     * Bitmap is stored LSB first.
      */
     finalizePage(binary, pageIndex, numEntries) {
       const offset = pageIndex * this.PAGE_SIZE;
@@ -430,6 +451,16 @@ var ESPWebFlash = (() => {
       view.setUint32(offset + 0, this.PAGE_STATE_ACTIVE, true);
       view.setUint32(offset + 4, pageIndex, true);
       view.setUint32(offset + 8, 4294967295, true);
+      const bitmapOffset = offset + 32;
+      for (let i = 0; i < 32; i++) {
+        binary[bitmapOffset + i] = 255;
+      }
+      for (let e = 0; e < numEntries; e++) {
+        const byteIdx = Math.floor(e / 4);
+        const bitPos = e % 4 * 2;
+        binary[bitmapOffset + byteIdx] &= ~(3 << bitPos);
+        binary[bitmapOffset + byteIdx] |= 2 << bitPos;
+      }
       const headerCRC = this.calculateCRC32(binary.slice(offset, offset + 28));
       view.setUint32(offset + 28, headerCRC, true);
     }
@@ -526,8 +557,19 @@ var ESPWebFlash = (() => {
           const actualLen = nullIndex >= 0 ? nullIndex : strLen;
           value = new TextDecoder().decode(totalBytes.slice(0, actualLen));
         } else if (type === this.TYPE_BLOB) {
-          const blobLen = view.getUint16(entryOffset + 20, true);
-          value = new Uint8Array(binary.buffer, binary.byteOffset + entryOffset + 24, Math.min(blobLen, 8));
+          const blobLen = view.getUint16(entryOffset + 24, true);
+          const blobData = new Uint8Array(blobLen);
+          let bytesRead = 0;
+          for (let s = 1; s < span; s++) {
+            const spanOffset = entryOffset + s * this.ENTRY_SIZE;
+            const chunkSize = Math.min(blobLen - bytesRead, this.ENTRY_SIZE);
+            blobData.set(
+              new Uint8Array(binary.buffer, binary.byteOffset + spanOffset, chunkSize),
+              bytesRead
+            );
+            bytesRead += chunkSize;
+          }
+          value = blobData;
         } else {
           entryIdx++;
           continue;
@@ -574,7 +616,7 @@ var ESPWebFlash = (() => {
         nvsNamespace = "config",
         nvsOffset = 36864,
         nvsSize = 24576,
-        firmwareOffset = 0
+        firmwareOffset = 65536
       } = options;
       try {
         this.emit("status", { state: "downloading", message: "Preparing firmware..." });
@@ -987,7 +1029,7 @@ var ESPWebFlash = (() => {
       if (matched) {
         const bootInstruction = BOOT_INSTRUCTIONS[chip] || BOOT_INSTRUCTIONS.esp32;
         const steps = pattern.steps.map((s) => s.replace("{bootInstruction}", bootInstruction));
-        const chipSpecific = steps.some((s) => s !== pattern.steps[pattern.steps.indexOf(s)]);
+        const chipSpecific = pattern.steps.some((s) => s.includes("{bootInstruction}"));
         return {
           type: pattern.type,
           title: pattern.title,
@@ -1227,7 +1269,7 @@ var ESPWebFlash = (() => {
   // src/core/config-schema.js
   function normalizeConfig(json) {
     if (json.version === 2) {
-      return json;
+      return { ...json, variants: json.variants.map((v) => ({ ...v })) };
     }
     return {
       version: 2,
