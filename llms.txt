@@ -29,7 +29,7 @@ Or embed a flash button on any webpage:
 Or generate a hosted flash URL with zero code:
 
 ```
-https://flash.example.com/user/repo
+https://esp-webflash.workers.dev/user/repo
 ```
 
 ## Documentation
@@ -60,7 +60,7 @@ Chrome 89+, Edge 89+, Opera 75+ (Web Serial API required). Not supported: Firefo
 
 An MCP server is available for AI tool integration. Connect to:
 ```
-https://flash.example.com/mcp
+https://esp-webflash.workers.dev/mcp
 ```
 
 Tools: `create_flasher`, `validate_config`, `resolve_repo`, `list_chips`, `list_field_presets`

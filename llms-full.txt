@@ -516,7 +516,7 @@ Claude Desktop / MCP client config:
 {
   "mcpServers": {
     "esp-webflash": {
-      "url": "https://flash.example.com/mcp"
+      "url": "https://esp-webflash.workers.dev/mcp"
     }
   }
 }
@@ -527,7 +527,7 @@ Claude Desktop / MCP client config:
 **create_flasher** — Generate a hosted flash page URL
   Input: { name, repo?, firmware?, chip?, release?, fields?, variants?, branding?, postFlash? }
   Either firmware or variants (with firmware in each) is required. Top-level fields/chip propagate as defaults into variants.
-  Returns: Flash page URL and short code
+  Returns: Flash page URL and config JSON
 
 **validate_config** — Validate a flash-config.json
   Input: { config: <object> }
