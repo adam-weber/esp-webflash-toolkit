@@ -1,0 +1,15 @@
+{
+  "name": "esp-webflash-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "node build.js && wrangler deploy",
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "wrangler": "^3.0.0"
+  }
+}

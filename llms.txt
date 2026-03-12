@@ -1,0 +1,66 @@
+# ESP WebFlash Toolkit
+
+> Flash ESP32 firmware from a browser. No installs, no drivers, just a URL.
+
+ESP WebFlash Toolkit is a JavaScript library and web component for flashing ESP32 microcontrollers via the Web Serial API. It supports ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C2, ESP32-C6, ESP32-H2, and ESP8266.
+
+## Quick Start
+
+Simplest possible usage — one function call:
+
+```javascript
+import { flashDevice } from 'esp-webflash-toolkit';
+
+await flashDevice({
+  firmware: 'https://example.com/firmware.bin',
+  chip: 'esp32s3',
+  config: { wifi_ssid: 'MyNetwork', wifi_pass: 'secret' },
+  onProgress: (percent) => console.log(`${percent}%`)
+});
+```
+
+Or embed a flash button on any webpage:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/esp-webflash-toolkit@latest/dist/esp-flasher-component.min.js"></script>
+<esp-flasher firmware="https://example.com/firmware.bin" chip="esp32" fields="wifi"></esp-flasher>
+```
+
+Or generate a hosted flash URL with zero code:
+
+```
+https://flash.example.com/user/repo
+```
+
+## Documentation
+
+- Full API reference: [llms-full.txt](https://raw.githubusercontent.com/adam-weber/esp-webflash-toolkit/main/llms-full.txt)
+- README: [README.md](https://github.com/adam-weber/esp-webflash-toolkit#readme)
+- npm: [esp-webflash-toolkit](https://www.npmjs.com/package/esp-webflash-toolkit)
+- GitHub: [adam-weber/esp-webflash-toolkit](https://github.com/adam-weber/esp-webflash-toolkit)
+
+## Key Concepts
+
+- **ESPFlasher**: Event-driven class for connecting, configuring, and flashing ESP devices
+- **NVSGenerator**: Generates ESP-IDF NVS partition binaries (WiFi credentials, device config)
+- **flash-config.json**: Drop-in config file for hosted flash pages (v1 simple, v2 multi-variant)
+- **`<esp-flasher>` web component**: Self-contained custom element with Shadow DOM
+- **Field presets**: `"wifi"`, `"mqtt"`, `"device_name"` expand to common config fields
+- **MCP server**: Remote MCP endpoint for AI-assisted flash page creation
+
+## Supported Chips
+
+esp32, esp32s2, esp32s3, esp32c3, esp32c2, esp32c6, esp32h2, esp8266
+
+## Browser Requirements
+
+Chrome 89+, Edge 89+, Opera 75+ (Web Serial API required). Not supported: Firefox, Safari.
+
+## MCP Server
+
+An MCP server is available for AI tool integration. Connect to:
+```
+https://flash.example.com/mcp
+```
+
+Tools: `create_flasher`, `validate_config`, `resolve_repo`, `list_chips`, `list_field_presets`

@@ -27,10 +27,10 @@ export { ESPFlasher, flashDevice } from './flasher.js';
 // Low-level components (for advanced usage)
 export { DeviceConnection } from './device-connection.js';
 export { FirmwareFlasher } from './firmware-flasher.js';
-export { NVSGenerator } from './nvs-generator.js';
+export { NVSGenerator, generateNVSFromConfig, parseNVSConfig } from './nvs-generator.js';
 
 // Config utilities
-export { ConfigStore, FieldPresets, expandFieldPresets } from './config-store.js';
+export { ConfigStore, FieldPresets, expandFieldPresets, flattenConfigSections, groupFieldsBySection } from './config-store.js';
 
 // Config schema v2
 export { normalizeConfig, resolveVariantFirmwareUrl, validateConfig, chipIdToName } from './config-schema.js';

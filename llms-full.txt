@@ -1,0 +1,573 @@
+# ESP WebFlash Toolkit — Complete API Reference
+
+> Flash ESP32 firmware from a browser. No installs, no drivers, just a URL.
+
+npm: esp-webflash-toolkit | License: MIT
+GitHub: adam-weber/esp-webflash-toolkit
+
+---
+
+## Installation
+
+```bash
+npm install esp-webflash-toolkit
+```
+
+Browser (CDN):
+```html
+<!-- Core only -->
+<script src="https://cdn.jsdelivr.net/npm/esp-webflash-toolkit@latest/dist/esp-webflash-toolkit.min.js"></script>
+
+<!-- Core + vanilla adapter -->
+<script src="https://cdn.jsdelivr.net/npm/esp-webflash-toolkit@latest/dist/esp-webflash-toolkit-full.min.js"></script>
+
+<!-- Web component (self-registers <esp-flasher>) -->
+<script src="https://cdn.jsdelivr.net/npm/esp-webflash-toolkit@latest/dist/esp-flasher-component.min.js"></script>
+```
+
+---
+
+## Simple API: flashDevice()
+
+Flash a device in one function call.
+
+```javascript
+import { flashDevice } from 'esp-webflash-toolkit';
+
+const result = await flashDevice({
+  firmware: 'https://example.com/firmware.bin',  // Required: firmware URL
+  config: { wifi_ssid: 'MyNetwork', wifi_pass: 'secret' },  // Optional: NVS config
+  chip: 'esp32s3',              // Optional: expected chip type
+  onProgress: (percent) => {},  // Optional: progress callback (0-100)
+  onLog: (msg, level) => {},    // Optional: log callback
+  firmwareOffset: 0x10000,      // Optional (default: 0x10000)
+  nvsOffset: 0x9000             // Optional (default: 0x9000)
+});
+// Returns: { chipType: string, macAddr: string }
+```
+
+---
+
+## Advanced API: ESPFlasher
+
+Event-driven class for full control over the flash process. Use this for custom UIs.
+
+```javascript
+import { ESPFlasher } from 'esp-webflash-toolkit';
+```
+
+### Constructor
+
+```javascript
+new ESPFlasher({
+  chip?: string,              // Expected chip type (e.g., 'esp32s3')
+  firmwareUrl?: string,       // Firmware download URL
+  fields?: Array,             // Config field definitions or preset names
+  firmwareOffset?: number,    // Default: 0x10000
+  nvsOffset?: number,         // Default: 0x9000
+  nvsSize?: number,           // Default: 0x6000
+  nvsNamespace?: string,      // Default: 'config'
+})
+```
+
+### Methods
+
+connect(): Promise<{chipType: string, macAddr: string}>
+  Connect to device via Web Serial. Prompts user to select port.
+
+disconnect(): Promise<void>
+  Close serial connection.
+
+isConnected(): boolean
+  Check connection status.
+
+getDevice(): DeviceConnection
+  Access low-level device connection.
+
+flash(opts?): Promise<boolean>
+  Flash firmware + NVS config. Options can override firmwareUrl, firmwareOffset, or pass customFirmware (File/Blob). Returns true on success.
+
+flashConfig(): Promise<boolean>
+  Flash only NVS config partition (no firmware). Returns true on success.
+
+reset(): Promise<void>
+  Hard reset the device.
+
+dispose(): void
+  Clean up resources and disconnect.
+
+setConfig(values: Object): void
+  Set NVS config values (e.g., { wifi_ssid: 'test' }).
+
+getConfig(): Object
+  Get current config values.
+
+getSchema(): Field[]
+  Get config field definitions.
+
+setVariant(variant: Variant, resolvedUrl?: string): void
+  Switch active firmware variant (v2 config).
+
+### Events
+
+All events use CustomEvent with data in `e.detail`.
+
+| Event | Detail | Description |
+|-------|--------|-------------|
+| progress | {percent, written?, total?} | Flash progress (0-100). written/total present during firmware write only |
+| log | {message, level} | Log message. Levels: info, debug, warning, error, success |
+| status | {state, message} | State change with human-readable message |
+| connected | {chipType, macAddr} | Device connected successfully |
+| disconnected | {} | Device disconnected |
+| error | {error, message} | Error occurred |
+| error-classified | {type, title, steps[], chipSpecific} | Error with recovery instructions |
+| complete | {} | Flash completed successfully |
+| chip-mismatch | {expected, detected, proceed(), cancel()} | Chip type doesn't match. Call proceed() or cancel(). |
+| state-change | {from, to, label} | State machine transition |
+| change | {key?, value?, values?} | Config value changed |
+| schema-changed | {schema} | Config field schema updated |
+
+### Example
+
+```javascript
+const flasher = new ESPFlasher({
+  chip: 'esp32s3',
+  firmwareUrl: 'https://github.com/user/repo/releases/latest/download/firmware.bin',
+  fields: ['wifi', { key: 'device_name', label: 'Device Name', type: 'text' }]
+});
+
+flasher.addEventListener('progress', e => console.log(`${e.detail.percent}%`));
+flasher.addEventListener('log', e => console.log(`[${e.detail.level}] ${e.detail.message}`));
+flasher.addEventListener('connected', e => console.log(`Connected: ${e.detail.chipType}`));
+flasher.addEventListener('error-classified', e => {
+  console.log(`Error: ${e.detail.title}`);
+  e.detail.steps.forEach(s => console.log(`  - ${s}`));
+});
+
+await flasher.connect();
+flasher.setConfig({ wifi_ssid: 'MyNetwork', wifi_pass: 'secret', device_name: 'sensor-01' });
+await flasher.flash();
+await flasher.reset();
+flasher.dispose();
+```
+
+---
+
+## NVSGenerator
+
+Generate ESP-IDF compatible NVS partition binaries.
+
+```javascript
+import { NVSGenerator } from 'esp-webflash-toolkit/nvs-generator';
+
+const nvs = new NVSGenerator();
+
+// Generate binary from namespace/key/value structure
+const binary = nvs.generate({
+  config: {                    // "config" is the NVS namespace
+    wifi_ssid: 'MyNetwork',   // String values
+    wifi_pass: 'secret',
+    device_name: 'sensor-01',
+    retry_count: 5             // Numeric values (auto-selects U8/U16/U32)
+  }
+}, 0x6000);  // Optional: partition size in bytes (default: 0x6000 = 24KB)
+
+// Returns: Uint8Array (flash this to NVS partition at 0x9000)
+
+// Parse an existing NVS binary back to key-value pairs
+const parsed = nvs.parse(binary);
+```
+
+### Reading NVS in Firmware
+
+```c
+// C/C++ (ESP-IDF)
+nvs_handle_t handle;
+nvs_open("config", NVS_READONLY, &handle);
+char ssid[32];
+size_t len = sizeof(ssid);
+nvs_get_str(handle, "wifi_ssid", ssid, &len);
+```
+
+```rust
+// Rust (esp-idf-svc)
+let nvs = EspNvs::new(partition, "config", true)?;
+let ssid = nvs.get_str("wifi_ssid")?;
+```
+
+---
+
+## ConfigStore
+
+Pure state container for device configuration.
+
+```javascript
+import { ConfigStore, FieldPresets, expandFieldPresets } from 'esp-webflash-toolkit';
+
+const store = new ConfigStore();
+store.setSchema(expandFieldPresets(['wifi', { key: 'name', label: 'Name', type: 'text' }]));
+store.set('wifi_ssid', 'MyNetwork');
+store.setAll({ wifi_pass: 'secret', name: 'sensor' });
+const all = store.getAll();       // { wifi_ssid: 'MyNetwork', wifi_pass: 'secret', name: 'sensor' }
+const nvsData = store.toNVS();    // Same, but only non-empty string values
+const { valid, missing } = store.validate();  // Check required fields
+```
+
+### Field Presets
+
+| Preset | Expands to |
+|--------|-----------|
+| "wifi" | wifi_ssid (text, required), wifi_pass (password, required) |
+| "mqtt" | mqtt_host (text), mqtt_user (text), mqtt_pass (password) |
+| "device_name" | device_name (text) |
+
+### Field Definition
+
+```javascript
+{
+  key: string,          // NVS key name
+  label: string,        // Display label
+  type?: string,        // 'text' (default), 'password', 'email', 'number', etc.
+  placeholder?: string,
+  required?: boolean,   // Default: false
+  default?: string,     // Default value
+  pattern?: string,     // Regex validation pattern
+  help?: string,        // Help text
+  section?: string      // Grouping key
+}
+```
+
+---
+
+## Flash States
+
+```javascript
+import { FlashStates, FlashStateMachine } from 'esp-webflash-toolkit';
+
+// States: IDLE, READY, CONNECTING, CONNECTED, DOWNLOADING, GENERATING, WRITING, VERIFYING, COMPLETE, ERROR
+
+const sm = new FlashStateMachine(); // Starts at IDLE
+sm.addEventListener('state-change', e => {
+  console.log(`${e.detail.from} → ${e.detail.to}: ${e.detail.label}`);
+});
+sm.transition(FlashStates.CONNECTING); // Returns true if valid
+sm.state;  // 'connecting'
+sm.label;  // 'Connecting...'
+sm.reset(); // Back to IDLE
+```
+
+---
+
+## Error Classification
+
+```javascript
+import { classifyError, isBrowserSupported, isMobile } from 'esp-webflash-toolkit';
+
+// Classify an error with recovery steps
+const classified = classifyError(error, { chip: 'esp32s3' });
+// Returns: { type, title, steps[], chipSpecific }
+
+// Error types: connection_timeout, port_in_use, download_failed, write_failed,
+//              disconnected_during_flash, chip_mismatch, no_port_selected, unknown
+
+// Browser support check
+const { supported, reason } = isBrowserSupported();
+const mobile = isMobile();
+```
+
+---
+
+## Config Schema v2
+
+```javascript
+import { normalizeConfig, resolveVariantFirmwareUrl, validateConfig, chipIdToName } from 'esp-webflash-toolkit';
+
+// Normalize v1 or v2 config to v2 format
+const config = normalizeConfig(rawJson);
+
+// Resolve firmware URL for a variant
+const url = resolveVariantFirmwareUrl(config.variants[0], config);
+
+// Validate
+const { valid, errors } = validateConfig(config);
+
+// Chip ID from binary header
+chipIdToName(0x0009); // 'esp32s3'
+```
+
+---
+
+## <esp-flasher> Web Component
+
+Self-contained custom element with Shadow DOM. Drop-in flash button for any page.
+
+### Usage
+
+```html
+<!-- Load component (self-registers) -->
+<script src="https://cdn.jsdelivr.net/npm/esp-webflash-toolkit@latest/dist/esp-flasher-component.min.js"></script>
+
+<!-- From inline attributes (compact button, opens modal on click) -->
+<esp-flasher firmware="https://..." chip="esp32" fields="wifi"></esp-flasher>
+
+<!-- From config URL -->
+<esp-flasher config="https://raw.githubusercontent.com/user/repo/main/flash-config.json"></esp-flasher>
+
+<!-- From GitHub repo (auto-discovers config or releases) -->
+<esp-flasher repo="user/repo"></esp-flasher>
+
+<!-- Full inline mode (no modal) -->
+<esp-flasher config="..." mode="full"></esp-flasher>
+
+<!-- Dark theme -->
+<esp-flasher config="..." theme="dark"></esp-flasher>
+
+<!-- Auto theme (follows OS preference) -->
+<esp-flasher config="..." theme="auto"></esp-flasher>
+
+<!-- Inline JSON config -->
+<esp-flasher config-data='{"version":2,"name":"My Project","variants":[...]}'></esp-flasher>
+```
+
+### Attributes
+
+| Attribute | Values | Description |
+|-----------|--------|-------------|
+| config | URL | Load flash-config.json from URL |
+| config-data | JSON string | Inline config JSON |
+| firmware | URL | Firmware download URL |
+| chip | esp32, esp32s3, etc. | Expected chip type |
+| fields | comma-separated | Field presets: "wifi", "mqtt", "device_name" |
+| repo | "user/repo" | GitHub repo (auto-discovers config) |
+| mode | "compact" (default), "full" | compact = button+modal, full = inline card |
+| theme | "light" (default), "dark", "auto" | Color scheme |
+| preview | (boolean) | Skip browser/mobile checks |
+
+### Events (composed, bubbles through Shadow DOM)
+
+| Event | Detail |
+|-------|--------|
+| esp-flasher:connected | {chipType, macAddr} |
+| esp-flasher:complete | {} |
+| esp-flasher:error | {error, message} |
+
+### Programmatic Access
+
+```javascript
+const el = document.querySelector('esp-flasher');
+el.flasher;  // Internal ESPFlasher instance
+
+el.addEventListener('esp-flasher:complete', () => {
+  console.log('Flash done!');
+});
+```
+
+---
+
+## flash-config.json
+
+Configuration file for hosted flash pages. Place in repo root.
+
+### v1 (Simple)
+
+```json
+{
+  "name": "My Project",
+  "firmware": "firmware.bin",
+  "chip": "esp32s3",
+  "offset": "0x10000",
+  "fields": ["wifi", { "key": "device_name", "label": "Device Name" }]
+}
+```
+
+### v2 (Multi-variant)
+
+```json
+{
+  "version": 2,
+  "name": "My Project",
+  "repo": "user/repo",
+  "release": "latest",
+  "branding": {
+    "logo": "https://example.com/logo.png",
+    "primaryColor": "#6366f1",
+    "theme": "light"
+  },
+  "variants": [
+    {
+      "id": "standard",
+      "name": "Standard Edition",
+      "description": "Full firmware with all features",
+      "firmware": "firmware.bin",
+      "chip": "esp32s3",
+      "offset": "0x10000",
+      "nvsOffset": "0x9000",
+      "fields": ["wifi", "mqtt", { "key": "device_name", "label": "Device Name" }]
+    },
+    {
+      "id": "lite",
+      "name": "Lite Edition",
+      "description": "Minimal firmware",
+      "firmware": "firmware-lite.bin",
+      "chip": "esp32c3",
+      "fields": ["wifi"]
+    }
+  ],
+  "postFlash": {
+    "title": "Setup Complete!",
+    "steps": ["Power cycle the device", "Connect to WiFi", "Open http://device.local"],
+    "link": { "label": "Getting Started", "url": "https://docs.example.com" }
+  }
+}
+```
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| version | 2 | yes (v2) | Config version |
+| name | string | yes | Project name |
+| repo | "user/repo" | no | GitHub repo for firmware URL resolution |
+| release | string | no | Release tag or "latest" (default) |
+| branding.logo | URL | no | Logo image |
+| branding.primaryColor | "#rrggbb" | no | Accent color |
+| branding.theme | "light"/"dark" | no | Default theme |
+| variants | array | yes (v2) | Firmware variants |
+| variants[].id | string | no | Unique identifier |
+| variants[].name | string | no | Display name |
+| variants[].description | string | no | Description text |
+| variants[].firmware | string | yes | Filename (resolved against repo releases) or absolute URL |
+| variants[].chip | string | no | esp32, esp32s2, esp32s3, esp32c3, esp32c2, esp32c6, esp32h2, esp8266 |
+| variants[].offset | hex/number | no | Firmware flash offset (default: 0x10000) |
+| variants[].nvsOffset | hex/number | no | NVS partition offset (default: 0x9000) |
+| variants[].fields | array | no | Config fields or preset names |
+| postFlash.title | string | no | Completion screen title |
+| postFlash.steps | string[] | no | Post-flash instructions |
+| postFlash.link | {label, url} | no | Link shown after flashing |
+
+---
+
+## Vanilla JS Adapter
+
+Pre-wired UI helpers for vanilla JavaScript projects.
+
+```javascript
+import { createFlasher } from 'esp-webflash-toolkit/adapters/vanilla';
+
+const { flasher, ui, dispose } = createFlasher({
+  chip: 'esp32s3',
+  firmwareUrl: 'https://example.com/firmware.bin',
+  fields: ['wifi'],
+  elements: {
+    statusBox: document.getElementById('status'),
+    progressFill: document.getElementById('progress'),
+    logContainer: document.getElementById('log'),
+    connectBtn: document.getElementById('connect'),
+    flashBtn: document.getElementById('flash')
+  },
+  storageKey: 'my-flasher'  // Optional: persist config to localStorage
+});
+```
+
+---
+
+## CLI
+
+```bash
+npx esp-webflash-toolkit              # Interactive setup wizard
+npx esp-webflash-toolkit create NAME  # Scaffold a flash page
+npx esp-webflash-toolkit url          # Generate hosted flash URL
+npx esp-webflash-toolkit generate [config] [-o dir]  # Generate self-contained HTML
+npx esp-webflash-toolkit init         # Initialize in current directory
+```
+
+---
+
+## Worker API
+
+Cloudflare Worker for config resolution and flash pages.
+
+### Endpoints
+
+GET /api/resolve/:user/:repo[/:tag]
+  Resolve flash-config.json from a GitHub repo. Falls back to GitHub Releases API.
+  Returns: v2 config JSON
+
+GET /:user/:repo[/:tag]
+  Flash page for a GitHub repo. Auto-resolves config and renders HTML.
+
+GET /proxy/raw.githubusercontent.com/...
+  CORS proxy for GitHub resources. Allowlist: raw.githubusercontent.com, api.github.com, github.com (release downloads only), objects.githubusercontent.com
+
+POST /mcp
+  MCP (Model Context Protocol) server endpoint. JSON-RPC 2.0 over Streamable HTTP.
+  Tools: create_flasher, validate_config, resolve_repo, list_chips, list_field_presets
+
+---
+
+## MCP Server
+
+The worker exposes an MCP endpoint at `/mcp` for AI tool integration.
+
+### Connect
+
+Claude Desktop / MCP client config:
+```json
+{
+  "mcpServers": {
+    "esp-webflash": {
+      "url": "https://flash.example.com/mcp"
+    }
+  }
+}
+```
+
+### Tools
+
+**create_flasher** — Generate a hosted flash page URL
+  Input: { name, repo?, firmware?, chip?, release?, fields?, variants?, branding?, postFlash? }
+  Either firmware or variants (with firmware in each) is required. Top-level fields/chip propagate as defaults into variants.
+  Returns: Flash page URL and short code
+
+**validate_config** — Validate a flash-config.json
+  Input: { config: <object> }
+  Returns: { valid: boolean, errors: string[] }
+
+**resolve_repo** — Resolve a GitHub repo to a flash config
+  Input: { repo: "user/repo", tag?: string }
+  Returns: Resolved v2 config JSON
+
+**list_chips** — List supported ESP32 chip types
+  Input: {}
+  Returns: Array of { name, hexId, description }
+
+**list_field_presets** — List available config field presets
+  Input: {}
+  Returns: Preset definitions (wifi, mqtt, device_name)
+
+---
+
+## Supported Chips
+
+| Chip | Hex ID | Description |
+|------|--------|-------------|
+| esp32 | 0x0000 | Xtensa dual-core, original |
+| esp32s2 | 0x0002 | Xtensa single-core, USB |
+| esp32s3 | 0x0009 | Xtensa dual-core, AI/USB |
+| esp32c3 | 0x0005 | RISC-V single-core |
+| esp32c2 | 0x000C | RISC-V ultra-low-power |
+| esp32c6 | 0x0012 | RISC-V with WiFi 6 |
+| esp32h2 | 0x000D | RISC-V with Thread/Zigbee |
+| esp8266 | — | Legacy, WiFi only |
+
+## Browser Requirements
+
+Web Serial API required: Chrome 89+, Edge 89+, Opera 75+.
+Not supported: Firefox, Safari.
+
+## Default Flash Offsets
+
+| Partition | Offset | Size |
+|-----------|--------|------|
+| Firmware | 0x10000 (64KB) | varies |
+| NVS | 0x9000 (36KB) | 0x6000 (24KB) |

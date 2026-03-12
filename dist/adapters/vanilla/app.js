@@ -163,6 +163,7 @@ class FlasherApp {
       if (links.length > 0) {
         nav.textContent = "";
         for (const link of links) {
+          if (!link.url || !/^https?:\/\//i.test(link.url)) continue;
           const a = document.createElement("a");
           a.href = link.url;
           a.target = "_blank";
@@ -183,7 +184,7 @@ class FlasherApp {
     desc.style.marginBottom = "24px";
     desc.textContent = project.description;
     container.appendChild(desc);
-    if (project.documentation) {
+    if (project.documentation && /^https?:\/\//i.test(project.documentation.url || "")) {
       const docLink = document.createElement("a");
       docLink.href = project.documentation.url;
       docLink.target = "_blank";
@@ -437,27 +438,45 @@ class FlasherApp {
       const statusBox = document.getElementById("status-box");
       const originalHTML = statusBox.innerHTML;
       statusBox.className = "status-box waiting";
-      statusBox.innerHTML = `
-                <div class="status-text">Chip Mismatch</div>
-                <div class="status-subtext" style="margin-bottom: 12px;">Expected ${expected}, found ${detected}</div>
-                <div style="display: flex; gap: 8px;">
-                    <button id="chip-btn-cancel" class="btn btn-primary" style="flex: 1; font-size: 13px; padding: 8px 12px;">Cancel</button>
-                    <button id="chip-btn-once" class="btn btn-secondary" style="flex: 1; font-size: 13px; padding: 8px 12px;">Continue</button>
-                    <button id="chip-btn-always" class="btn btn-secondary" style="flex: 1; font-size: 13px; padding: 8px 12px;">Always Allow</button>
-                </div>
-            `;
+      statusBox.textContent = "";
+      const title = document.createElement("div");
+      title.className = "status-text";
+      title.textContent = "Chip Mismatch";
+      statusBox.appendChild(title);
+      const sub = document.createElement("div");
+      sub.className = "status-subtext";
+      sub.style.marginBottom = "12px";
+      sub.textContent = `Expected ${expected}, found ${detected}`;
+      statusBox.appendChild(sub);
+      const btnRow = document.createElement("div");
+      btnRow.style.cssText = "display: flex; gap: 8px;";
+      const btnStyle = "flex: 1; font-size: 13px; padding: 8px 12px;";
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "btn btn-primary";
+      cancelBtn.style.cssText = btnStyle;
+      cancelBtn.textContent = "Cancel";
+      const onceBtn = document.createElement("button");
+      onceBtn.className = "btn btn-secondary";
+      onceBtn.style.cssText = btnStyle;
+      onceBtn.textContent = "Continue";
+      const alwaysBtn = document.createElement("button");
+      alwaysBtn.className = "btn btn-secondary";
+      alwaysBtn.style.cssText = btnStyle;
+      alwaysBtn.textContent = "Always Allow";
+      btnRow.append(cancelBtn, onceBtn, alwaysBtn);
+      statusBox.appendChild(btnRow);
       const restore = () => {
         statusBox.innerHTML = originalHTML;
       };
-      document.getElementById("chip-btn-cancel").addEventListener("click", () => {
+      cancelBtn.addEventListener("click", () => {
         restore();
         resolve("cancel");
       });
-      document.getElementById("chip-btn-once").addEventListener("click", () => {
+      onceBtn.addEventListener("click", () => {
         restore();
         resolve("once");
       });
-      document.getElementById("chip-btn-always").addEventListener("click", () => {
+      alwaysBtn.addEventListener("click", () => {
         restore();
         resolve("always");
       });

@@ -99,13 +99,16 @@ function renderPostFlash(postFlash) {
     frag.appendChild(ol);
   }
   if (postFlash.link) {
-    const a = document.createElement("a");
-    a.className = "post-flash-link";
-    a.href = postFlash.link.url;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = postFlash.link.label;
-    frag.appendChild(a);
+    const linkUrl = postFlash.link.url || "";
+    if (/^https?:\/\//i.test(linkUrl)) {
+      const a = document.createElement("a");
+      a.className = "post-flash-link";
+      a.href = linkUrl;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = postFlash.link.label;
+      frag.appendChild(a);
+    }
   }
   return frag;
 }

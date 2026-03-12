@@ -5,13 +5,19 @@
   "description": "Headless ESP32 flashing library for the browser - framework agnostic, event-driven",
   "keywords": [
     "esp32",
+    "esp32s3",
+    "esp32c3",
     "esp8266",
     "firmware",
     "flasher",
     "web-serial",
+    "web-component",
     "nvs",
-    "partition-table",
-    "esptool"
+    "esptool",
+    "iot",
+    "embedded",
+    "browser-flash",
+    "mcp"
   ],
   "author": "Adam Weber",
   "license": "MIT",
@@ -23,22 +29,27 @@
     "url": "https://github.com/adam-weber/esp-webflash-toolkit/issues"
   },
   "homepage": "https://github.com/adam-weber/esp-webflash-toolkit#readme",
+  "types": "./types/index.d.ts",
   "main": "./dist/core/index.js",
   "module": "./dist/core/index.js",
   "exports": {
     ".": {
+      "types": "./types/index.d.ts",
       "import": "./dist/core/index.js"
     },
     "./core": {
+      "types": "./types/index.d.ts",
       "import": "./dist/core/index.js"
     },
     "./adapters/vanilla": {
+      "types": "./types/vanilla.d.ts",
       "import": "./dist/adapters/vanilla/index.js"
     },
     "./nvs-generator": {
       "import": "./dist/core/nvs-generator.js"
     },
     "./component": {
+      "types": "./types/component.d.ts",
       "import": "./dist/components/esp-flasher.js"
     },
     "./dist/*": "./dist/*"
@@ -53,11 +64,14 @@
   },
   "files": [
     "dist/",
+    "types/",
     "templates/",
     "bin/",
     "scripts/generate-page.js",
     "src/core/config-schema.js",
     "action.yml",
+    "llms.txt",
+    "llms-full.txt",
     "README.md",
     "LICENSE"
   ],

@@ -276,7 +276,7 @@ Do you want to continue anyway?`
         }
         this.elements.statusBox.appendChild(ol);
       }
-      if (pf.link) {
+      if (pf.link && /^https?:\/\//i.test(pf.link.url || "")) {
         const a = document.createElement("a");
         a.href = pf.link.url;
         a.target = "_blank";

@@ -1,0 +1,10 @@
+name = "esp-webflash"
+main = "dist/worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "RESOLVED_CONFIGS"
+id = ""        # Fill after `wrangler kv:namespace create RESOLVED_CONFIGS`
+
+# Set GitHub token for higher rate limits (5000/hr vs 60/hr)
+# wrangler secret put GITHUB_TOKEN

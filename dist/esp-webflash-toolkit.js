@@ -50,9 +50,13 @@ var ESPWebFlash = (() => {
     classifyError: () => classifyError,
     expandFieldPresets: () => expandFieldPresets,
     flashDevice: () => flashDevice,
+    flattenConfigSections: () => flattenConfigSections,
+    generateNVSFromConfig: () => generateNVSFromConfig,
+    groupFieldsBySection: () => groupFieldsBySection,
     isBrowserSupported: () => isBrowserSupported,
     isMobile: () => isMobile,
     normalizeConfig: () => normalizeConfig,
+    parseNVSConfig: () => parseNVSConfig,
     resolveVariantFirmwareUrl: () => resolveVariantFirmwareUrl,
     validateConfig: () => validateConfig
   });
@@ -766,6 +770,16 @@ var ESPWebFlash = (() => {
         section: section.title || section.id
       }))
     );
+  }
+  function groupFieldsBySection(fields) {
+    if (!fields) return [];
+    const groups = /* @__PURE__ */ new Map();
+    for (const field of fields) {
+      const section = field.section || "default";
+      if (!groups.has(section)) groups.set(section, []);
+      groups.get(section).push(field);
+    }
+    return Array.from(groups.entries()).map(([title, fields2]) => ({ title, fields: fields2 }));
   }
   var ConfigStore = class extends EventTarget {
     constructor(initialConfig = {}) {
